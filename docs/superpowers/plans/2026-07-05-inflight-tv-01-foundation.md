@@ -13,7 +13,7 @@
 - Cockpit package name: `inflighttv`. Install dir: `/usr/share/cockpit/inflighttv`. Dev dir: `~/.local/share/cockpit/inflighttv`.
 - `manifest.json`: `"requires": { "cockpit": "215" }`, entry `tools.index → index.html`, label `InFlight TV`.
 - CSP (manifest): `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; worker-src 'self' blob:; object-src 'self'`.
-- Vite: `base: './'`, `modulePreload.polyfill: false`, `external: ['cockpit']`, Vue runtime-only, `build.cssCodeSplit: false`.
+- Vite: `base: './'`, `modulePreload.polyfill: false`, `resolve.alias` maps `cockpit` → `src/cockpit.ts` shim (do NOT use `external: ['cockpit']` — externalizing a bare specifier leaves an unresolvable `import from 'cockpit'` in the ESM bundle and crashes the app; the shim reads `window.cockpit` and bundles fine), Vue runtime-only, `build.cssCodeSplit: false`.
 - `cockpit` is never bundled: loaded via `<script src="../base1/cockpit.js">`; `import cockpit from 'cockpit'` is aliased to `window.cockpit`.
 - Core modules under `src/core/**` must NOT import Vue, Pinia, or `window.cockpit` directly — all host access is injected via interfaces. This keeps them unit-testable.
 - No monolithic files: one clear responsibility per file (per project preference).
