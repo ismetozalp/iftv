@@ -20,3 +20,6 @@ npm-debug.log*
 
 # Subagent-driven dev scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Local dev-only mock server (not shipped)
+dev/
