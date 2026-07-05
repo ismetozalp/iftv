@@ -15,5 +15,14 @@ export function createCockpitTransport(): XtreamTransport {
         return null
       }
     },
+    async fetchText(fullUrl: string): Promise<string> {
+      const u = new URL(fullUrl)
+      const port = u.port ? Number(u.port) : u.protocol === 'https:' ? 443 : 80
+      const options =
+        u.protocol === 'https:'
+          ? { address: u.hostname, port, tls: {} }
+          : { address: u.hostname, port }
+      return cockpit.http(options).get(u.pathname + u.search)
+    },
   }
 }

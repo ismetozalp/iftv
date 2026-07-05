@@ -7,7 +7,7 @@ import type { XtreamTransport } from '@/core/xtream/transport'
 const NEW = { name: 'P1', url: 'http://h:8080', username: 'u', password: 'p' }
 
 function transport(auth: number, status = 'Active'): XtreamTransport {
-  return { getJson: vi.fn(async () => ({ user_info: { auth, status } })) }
+  return { getJson: vi.fn(async () => ({ user_info: { auth, status } })), fetchText: async () => '' }
 }
 function seq() {
   let n = 0

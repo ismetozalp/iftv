@@ -18,6 +18,9 @@ describe('XtreamTransport contract', () => {
       async getJson(base, path, params) {
         return { base, path, params }
       },
+      async fetchText() {
+        return ''
+      },
     }
     const out = await fake.getJson({ scheme: 'http', host: 'h', port: 80 }, '/player_api.php', { username: 'u' })
     expect(out).toEqual({ base: { scheme: 'http', host: 'h', port: 80 }, path: '/player_api.php', params: { username: 'u' } })

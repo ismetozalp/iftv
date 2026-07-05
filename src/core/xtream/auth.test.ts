@@ -3,7 +3,7 @@ import { xtreamLogin } from './auth'
 import type { XtreamTransport } from './transport'
 
 function transportReturning(payload: unknown): XtreamTransport {
-  return { getJson: vi.fn(async () => payload) }
+  return { getJson: vi.fn(async () => payload), fetchText: async () => '' }
 }
 
 describe('xtreamLogin', () => {

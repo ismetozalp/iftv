@@ -6,6 +6,7 @@ export interface XtreamBase {
 
 export interface XtreamTransport {
   getJson(base: XtreamBase, path: string, params: Record<string, string>): Promise<unknown>
+  fetchText(url: string): Promise<string>
 }
 
 export function buildPlayerApiParams(
