@@ -15,8 +15,13 @@ export function toBool01(v: unknown): boolean {
 export function decodeB64(v: unknown): string {
   const s = toStr(v)
   if (!s) return ''
+  // EPG titles usually arrive base64-encoded, but some panels send plain text.
+  // Only decode when the string looks like canonical base64; otherwise return it as-is.
+  if (s.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return s
   try {
-    const bytes = Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
+    const binary = atob(s)
+    if (btoa(binary) !== s) return s // non-canonical base64 → treat as plain text
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
     return new TextDecoder().decode(bytes)
   } catch {
     return s

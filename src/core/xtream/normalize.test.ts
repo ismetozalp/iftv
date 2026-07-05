@@ -43,6 +43,10 @@ describe('decodeB64', () => {
     expect(decodeB64('')).toBe('')
     expect(decodeB64(null)).toBe('')
   })
+  it('returns plain text unchanged when it is not valid base64', () => {
+    expect(decodeB64('News Update')).toBe('News Update')   // space → not base64
+    expect(decodeB64('Hello World!')).toBe('Hello World!') // punctuation → not base64
+  })
 })
 
 describe('parseXtreamUrl', () => {
