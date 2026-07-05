@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const props = withDefaults(defineProps<{ items: unknown[]; itemWidth?: number; itemHeight?: number; gap?: number }>(), {
   itemWidth: 180, itemHeight: 130, gap: 12,
@@ -25,6 +25,11 @@ onMounted(() => {
   if (container.value) ro.observe(container.value)
 })
 onBeforeUnmount(() => ro?.disconnect())
+
+watch(() => props.items, () => {
+  if (container.value) container.value.scrollTop = 0
+  scrollTop.value = 0
+})
 
 const cols = computed(() => Math.max(1, Math.floor((width.value + props.gap) / (props.itemWidth + props.gap))))
 const rowH = computed(() => props.itemHeight + props.gap)
