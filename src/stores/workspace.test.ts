@@ -2,12 +2,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useWorkspaceStore } from './workspace'
 import { createMemoryStore } from '@/core/storage/appState'
-import type { XtreamTransport } from '@/core/xtream/transport'
+const NEW = { type: 'xtream' as const, name: 'P1', url: 'http://h:8080', username: 'u', password: 'p' }
+const M3U = { type: 'm3u' as const, name: 'Free', url: 'http://host/list.m3u', username: '', password: '' }
 
-const NEW = { name: 'P1', url: 'http://h:8080', username: 'u', password: 'p' }
-
-function transport(auth: number, status = 'Active'): XtreamTransport {
-  return { getJson: vi.fn(async () => ({ user_info: { auth, status } })), fetchText: async () => '' }
+function transport(auth: number, status = 'Active', m3uBody = '#EXTM3U\n') {
+  return {
+    getJson: vi.fn(async () => ({ user_info: { auth, status } })),
+    fetchText: vi.fn(async () => m3uBody),
+  }
 }
 function seq() {
   let n = 0
@@ -92,5 +94,36 @@ describe('useWorkspaceStore', () => {
     expect(s.allAccounts).toHaveLength(0)
     expect(s.openTabs).toHaveLength(0)
     expect(s.activeAccount).toBeNull()
+  })
+
+  it('adds an m3u account (no credentials) after a valid-playlist verify', async () => {
+    const s = useWorkspaceStore()
+    s.$configure({ store: createMemoryStore(), transport: transport(1), ids: seq() })
+    await s.init()
+    await s.add(M3U, true)
+    expect(s.allAccounts).toHaveLength(1)
+    expect(s.allAccounts[0].type).toBe('m3u')
+  })
+
+  it('rejects an m3u account whose URL is not a playlist', async () => {
+    const s = useWorkspaceStore()
+    s.$configure({ store: createMemoryStore(), transport: transport(1, 'Active', '<html>nope</html>'), ids: seq() })
+    await s.init()
+    await expect(s.add(M3U, true)).rejects.toThrow(/not a valid m3u/i)
+    expect(s.allAccounts).toHaveLength(0)
+  })
+
+  it('update patches an account and persists it', async () => {
+    const store = createMemoryStore()
+    const s = useWorkspaceStore()
+    s.$configure({ store, transport: transport(1), ids: seq() })
+    await s.init()
+    await s.add(NEW, false)
+    await s.update('id1', { name: 'Renamed' })
+    expect(s.allAccounts[0].name).toBe('Renamed')
+    const s2 = useWorkspaceStore()
+    s2.$configure({ store, transport: transport(1), ids: seq() })
+    await s2.init()
+    expect(s2.allAccounts[0].name).toBe('Renamed')
   })
 })

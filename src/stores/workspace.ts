@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import type { JsonStore } from '@/core/storage/appState'
 import type { XtreamTransport } from '@/core/xtream/transport'
-import { xtreamLogin, type XtreamAuth } from '@/core/xtream/auth'
 import {
-  EMPTY_ACCOUNTS, addAccount, removeAccount, findAccount,
+  EMPTY_ACCOUNTS, addAccount, removeAccount, updateAccount, findAccount,
   loadAccounts, saveAccounts, type AccountsState, type Account, type NewAccount,
 } from '@/core/accounts/accounts'
+import { xtreamLogin } from '@/core/xtream/auth'
+import { verifyAccount, type VerifyResult } from '@/core/accounts/verify'
 import {
   EMPTY_TABS, openTab, closeTab, activateTab, reconcileTabs,
   loadTabs, saveTabs, type TabsState,
@@ -66,21 +67,28 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.loading = false
       }
     },
-    async verify(input: NewAccount): Promise<XtreamAuth> {
+    async verify(input: NewAccount): Promise<VerifyResult> {
       const { transport } = await this._host()
-      return xtreamLogin(transport, input.url, input.username, input.password)
+      return verifyAccount(input, {
+        xtreamLogin: (url, username, password) => xtreamLogin(transport, url, username, password),
+        fetchText: (url) => transport.fetchText(url),
+      })
     },
     async add(input: NewAccount, verify: boolean) {
       const { ids } = await this._host()
       if (verify) {
         const res = await this.verify(input)
-        if (!res.active) throw new Error(`Account not active (auth=${res.auth}, status="${res.status}")`)
+        if (!res.ok) throw new Error(res.detail)
       }
       const meta = ids()
       this.accounts = addAccount(this.accounts, input, meta)
       await this._persistAccounts()
       this.tabs = openTab(this.tabs, meta.id)
       await this._persistTabs()
+    },
+    async update(id: string, patch: Partial<Omit<Account, 'id' | 'createdAt'>>) {
+      this.accounts = updateAccount(this.accounts, id, patch)
+      await this._persistAccounts()
     },
     async remove(id: string) {
       this.accounts = removeAccount(this.accounts, id)
