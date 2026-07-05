@@ -22,11 +22,9 @@ export default defineConfig({
     cssCodeSplit: false,
     modulePreload: { polyfill: false },
     rollupOptions: {
-      external: ['cockpit'],
       output: {
         entryFileNames: 'index.js',
         assetFileNames: 'index[extname]',
-        globals: { cockpit: 'cockpit' },
       },
     },
   },
