@@ -35,4 +35,15 @@ describe('parseM3u', () => {
   it('returns empty for a body with no entries', () => {
     expect(parseM3u('#EXTM3U\n')).toEqual({ categories: [], channels: [] })
   })
+  it('handles commas inside attribute values and inside the title', () => {
+    const { channels } = parseM3u('#EXTM3U\n#EXTINF:-1 tvg-name="X" group-title="Sports, Live",News, Weekend\nhttp://s/nw\n')
+    expect(channels).toHaveLength(1)
+    expect(channels[0].name).toBe('News, Weekend')
+    expect(channels[0].categoryId).toBe('Sports, Live')
+  })
+  it('falls back to tvg-name then Unnamed when there is no display text', () => {
+    const { channels } = parseM3u('#EXTM3U\n#EXTINF:-1 tvg-name="OnlyTvg",\nhttp://s/a\n#EXTINF:-1,\nhttp://s/b\n')
+    expect(channels[0].name).toBe('OnlyTvg')
+    expect(channels[1].name).toBe('Unnamed')
+  })
 })
