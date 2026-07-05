@@ -265,6 +265,19 @@ probe drives Hardware Settings GPU detection.
     password → clean "wrong password" error; unrecognized/corrupt file → clean error).
   - This is the **first backup deliverable** and reuses the crypto layer directly (it is effectively
     a `FileDownloadProvider`/`FileUploadProvider` with no remote calls).
+- **Password helper (on every backup password prompt — local file and cloud):** a **Generate**
+  button produces a strong random password using `crypto.getRandomValues` (never `Math.random`) —
+  **24 characters** drawn from uppercase, lowercase, digits, and symbols with **at least one of each
+  class** (~150 bits entropy) — and a **Copy** button writes it to the clipboard via
+  `navigator.clipboard.writeText` (Cockpit is a secure HTTPS context; a hidden-`<textarea>` +
+  `document.execCommand('copy')` fallback covers any iframe clipboard restriction). The generated
+  password is shown so the user can save it — losing it makes the encrypted backup unrecoverable.
+  Lives in `core/backup/password.ts` (pure generator, unit-tested for length + class coverage) with
+  a small reusable `PasswordField` component (generate + copy + show/hide).
+- **The backup password is NEVER stored** — not in `settings.json`, not on disk, not inside the
+  backup file. It is **prompted each time a backup is created and each time one is restored** (a
+  modal at create/restore, not a Settings field). The create-time prompt carries the generate+copy
+  helper so the user mints a strong password, copies it somewhere safe, and re-enters it to restore.
 - **`StorageProvider` interface (cloud):** `connect()`, `list()`, `put(name, blob)`, `get(name)`,
   `delete(name)`. Crypto sits above it — providers only ever see ciphertext.
 - **First provider — GitHub fine-grained PAT:** redirect-free, `api.github.com` is CORS-friendly,
