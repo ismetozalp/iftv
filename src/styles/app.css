@@ -11,3 +11,16 @@ body { margin: 0; }
 .iftv-tab.active { background: var(--bs-primary); color: #fff; border-color: var(--bs-primary); }
 .iftv-tab-close { border: none; background: transparent; color: inherit; line-height: 1; padding: 0; cursor: pointer; font-size: 1.1rem; }
 .iftv-tab-add { text-decoration: none; }
+
+.iftv-live { gap: 1rem; height: calc(100vh - 120px); }
+.iftv-cats { width: 220px; flex: 0 0 220px; overflow-y: auto; }
+.iftv-cats .list-group-item.active { background: var(--bs-primary); border-color: var(--bs-primary); }
+.iftv-grid-wrap { min-width: 0; }
+.iftv-vgrid { height: 100%; overflow-y: auto; position: relative; }
+.iftv-vgrid-inner { position: relative; width: 100%; }
+.iftv-vgrid-cell { position: absolute; top: 0; left: 0; }
+.iftv-channel { align-items: center; justify-content: center; padding: 0.5rem; cursor: pointer; overflow: hidden; }
+.iftv-channel-logo { height: 72px; display: flex; align-items: center; justify-content: center; }
+.iftv-channel-logo img { max-height: 72px; max-width: 100%; object-fit: contain; }
+.iftv-channel-fallback { font-size: 1.5rem; font-weight: 600; color: var(--bs-secondary); }
+.iftv-channel-name { width: 100%; text-align: center; font-size: 0.85rem; margin-top: 0.25rem; }
