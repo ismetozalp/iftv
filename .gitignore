@@ -17,3 +17,6 @@ npm-debug.log*
 
 # Claude Code local config
 .claude/
+
+# Subagent-driven dev scratch (ledger, briefs, review packages)
+.superpowers/
