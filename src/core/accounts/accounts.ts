@@ -48,7 +48,10 @@ export function getActive(state: AccountsState): Account | null {
 const ACCOUNTS_KEY = 'accounts.json'
 
 export async function loadAccounts(store: JsonStore): Promise<AccountsState> {
-  return store.load(ACCOUNTS_KEY, EMPTY_ACCOUNTS)
+  const s = await store.load<AccountsState>(ACCOUNTS_KEY, EMPTY_ACCOUNTS)
+  // Never hand back the shared EMPTY_ACCOUNTS singleton (or the loaded object) by
+  // reference — return a fresh copy so consumers can't corrupt shared state.
+  return { activeId: s.activeId ?? null, accounts: [...s.accounts] }
 }
 
 export async function saveAccounts(store: JsonStore, state: AccountsState): Promise<void> {

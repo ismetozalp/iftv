@@ -72,4 +72,11 @@ describe('load/save round-trip', () => {
   it('returns EMPTY when nothing saved', async () => {
     expect(await loadAccounts(createMemoryStore())).toEqual(EMPTY_ACCOUNTS)
   })
+  it('never returns the shared EMPTY_ACCOUNTS singleton on a fresh store', async () => {
+    const loaded = await loadAccounts(createMemoryStore())
+    expect(loaded).toEqual(EMPTY_ACCOUNTS)
+    expect(loaded).not.toBe(EMPTY_ACCOUNTS)
+    loaded.accounts.push({ id: 'x', name: '', url: '', username: '', password: '', createdAt: 0 })
+    expect(EMPTY_ACCOUNTS.accounts).toHaveLength(0)
+  })
 })
