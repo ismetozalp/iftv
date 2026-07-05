@@ -5,7 +5,7 @@ const JSON_SYNTAX = { parse: (s: string) => JSON.parse(s), stringify: (o: unknow
 
 export async function createCockpitStore(): Promise<JsonStore> {
   const user = await cockpit.user()
-  const dir = `${user.home}/.config/inflighttv`
+  const dir = `${user.home}/.config/cockpit/inflighttv`
   await cockpit.spawn(['mkdir', '-p', dir])
   const pathOf = (name: string) => `${dir}/${name}`
   return {
