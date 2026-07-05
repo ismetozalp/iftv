@@ -1,0 +1,7 @@
+{
+  "version": 0,
+  "name": "inflighttv",
+  "requires": { "cockpit": "215" },
+  "tools": { "index": { "label": "InFlight TV", "path": "index.html", "order": 50 } },
+  "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; worker-src 'self' blob:; object-src 'self'"
+}
