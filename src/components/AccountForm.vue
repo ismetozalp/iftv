@@ -27,7 +27,7 @@ function submit() {
     type: form.type, name: form.name.trim(), url: form.url.trim(),
     username: form.type === 'xtream' ? form.username : '',
     password: form.type === 'xtream' ? form.password : '',
-    ...((form.epgUrl ?? '').trim() ? { epgUrl: (form.epgUrl ?? '').trim() } : {}),
+    epgUrl: (form.epgUrl ?? '').trim(),
   }
   emit('submit', payload)
 }
