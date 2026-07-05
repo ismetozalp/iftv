@@ -20,7 +20,7 @@ The name is a play on Cockpit ("in-flight"); it is **not** intended for aircraft
 - Reliable in-browser playback despite CORS + mixed-content constraints.
 - Personal organization: favorites, multiple named custom lists, watch-later, continue-watching, history.
 - Global search across all content; searchable/sortable watch-later.
-- Encrypted, restorable cloud backup of all app state.
+- Encrypted, restorable backup of all app state — a downloadable local file (export/import via Settings) and, later, cloud providers.
 - GPU-accelerated transcoding with device selection.
 - Clean, modular, feature-sliced codebase (no monolithic files).
 
@@ -205,7 +205,8 @@ tabs module owns open/active state.
 | Account tabs | explorer-style: one tab per opened account, open/close ≠ add/remove, persisted `tabs.json`, single account auto-opens; `core/accounts/tabs.ts` + `AccountTabBar` |
 | Player essentials | audio/subtitle track select, quality, keyboard shortcuts, fullscreen/PiP |
 | Hardware settings | GPU detect + method/device selection + software fallback |
-| Backup | encrypt → `StorageProvider`; list/restore |
+| Backup (local file) | encrypt state → `Blob` → browser download; Settings upload → decrypt → restore (same crypto envelope, no provider) |
+| Backup (cloud) | encrypt → `StorageProvider` (GitHub PAT first); list/restore |
 
 ## 7. Xtream API reference (implementation targets)
 
@@ -246,15 +247,25 @@ detects the package manager (dnf/apt/…) and offers a one-click install
 (`cockpit.spawn` with `superuser: "require"`), with manual instructions as fallback. The same
 probe drives Hardware Settings GPU detection.
 
-## 10. Encrypted cloud backup
+## 10. Encrypted backup (local file + cloud)
 
 - **Crypto (`core/backup/crypto.ts`):** PBKDF2-SHA256, ≥600,000 iterations, random 16-byte salt →
   AES-256-GCM with a fresh random 12-byte IV. Self-describing envelope:
   ```json
   { "v": 1, "kdf": "PBKDF2-SHA256", "iter": 600000, "salt": "<b64>", "iv": "<b64>", "ct": "<b64>" }
   ```
-  The password never leaves the browser; wrong password fails the GCM tag → clean error.
-- **`StorageProvider` interface:** `connect()`, `list()`, `put(name, blob)`, `get(name)`,
+  The password never leaves the browser; wrong password fails the GCM tag → clean error. The same
+  envelope is used for both the local-file and cloud paths.
+- **Local encrypted backup file (export / import) — the simplest path, no provider needed:**
+  - **Export:** serialize all app state → encrypt to the envelope above with a user-entered
+    password → wrap as a `Blob` → trigger a **browser download** (`<a download>` of an
+    `inflighttv-backup-<date>.iftv` file). No cloud, no network.
+  - **Import / restore:** in **Settings**, the user picks a previously downloaded file (`<input type=file>`),
+    enters the password, the app decrypts + validates the envelope and restores the state (wrong
+    password → clean "wrong password" error; unrecognized/corrupt file → clean error).
+  - This is the **first backup deliverable** and reuses the crypto layer directly (it is effectively
+    a `FileDownloadProvider`/`FileUploadProvider` with no remote calls).
+- **`StorageProvider` interface (cloud):** `connect()`, `list()`, `put(name, blob)`, `get(name)`,
   `delete(name)`. Crypto sits above it — providers only ever see ciphertext.
 - **First provider — GitHub fine-grained PAT:** redirect-free, `api.github.com` is CORS-friendly,
   no app review; user pastes a repo-scoped PAT once. Backups PUT via the Contents API; list/restore
