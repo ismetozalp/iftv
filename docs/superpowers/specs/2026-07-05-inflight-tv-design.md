@@ -58,7 +58,7 @@ Vue 3 SPA (Cockpit iframe)
 ├── Metadata     : cockpit.http → player_api.php   (server-side fetch, no CORS)
 ├── Media engine : cockpit.spawn → ffmpeg → rolling HLS files;
 │                  cockpit.file → custom hls.js loader → <video>
-├── Persistence  : cockpit.file → ~/.config/inflighttv/*.json
+├── Persistence  : cockpit.file → ~/.config/cockpit/inflighttv/*.json
 └── Backup       : StorageProvider + Web Crypto (cloud calls via cockpit.http)
 Host provides: ffmpeg, DRM render nodes / NVENC (GPU)
 ```
@@ -102,7 +102,7 @@ ffmpeg GPU transcoding, with device selection in a **Hardware Settings** panel:
 
 ### 3.4 Persistence
 Account-scoped state stored as JSON via `cockpit.file(..., {syntax: JSON})` in
-`~/.config/inflighttv/`, using `.modify()` for safe concurrent writes and `.watch()` to react to
+`~/.config/cockpit/inflighttv/`, using `.modify()` for safe concurrent writes and `.watch()` to react to
 external edits. `localStorage` only for ephemeral per-browser scraps (volume, last tab).
 
 ### 3.5 Backup
@@ -123,8 +123,8 @@ inflight-tv/
       media/   PlaybackEngine.ts ffmpegEngine.ts hlsCockpitLoader.ts session.ts hwaccel.ts
       storage/ appState.ts schema.ts
       backup/  crypto.ts StorageProvider.ts githubProvider.ts backupService.ts
-      accounts/ accounts.ts
-    stores/    accounts.ts library.ts favorites.ts lists.ts watchLater.ts
+      accounts/ accounts.ts tabs.ts
+    stores/    workspace.ts library.ts favorites.ts lists.ts watchLater.ts
                continueWatching.ts history.ts settings.ts player.ts
     views/     live/ vod/ series/ epg/ search/ watchlater/ lists/ history/
                settings/ backup/ player/
@@ -140,13 +140,12 @@ Vue components so it is unit-testable in isolation. If a file grows large, it is
 
 ## 5. Data model
 
-Persisted JSON files in `~/.config/inflighttv/`. Personal data is **namespaced per account**
+Persisted JSON files in `~/.config/cockpit/inflighttv/`. Personal data is **namespaced per account**
 because content IDs are not portable across providers.
 
-**`accounts.json`**
+**`accounts.json`** (registry only — no active/open state)
 ```jsonc
 {
-  "activeId": "acc_1",
   "accounts": [
     { "id": "acc_1", "name": "My Provider", "url": "http://host:8080",
       "username": "u", "password": "p", "createdAt": 1751731200 }
@@ -155,6 +154,15 @@ because content IDs are not portable across providers.
 ```
 Passwords are stored here (user's own home dir, file mode 600; Xtream requires them in every
 request). A future "don't persist password" toggle is possible but not in the first version.
+
+**`tabs.json`** (explorer-style account tabs — which accounts are open, and which is focused)
+```jsonc
+{ "openTabIds": ["acc_1", "acc_2"], "activeTabId": "acc_1" }
+```
+One tab per opened account; opening/closing a tab is separate from adding/removing an account
+(closing a tab does NOT delete the account). Open tabs + active tab persist across reloads. When
+exactly one account exists, it is auto-opened. The accounts core is registry-only; a separate
+tabs module owns open/active state.
 
 **`data-<accountId>.json`**
 ```jsonc
@@ -193,7 +201,8 @@ request). A future "don't persist password" toggle is possible but not in the fi
 | Continue Watching | `progress` map keyed by `type:id`; resume via ffmpeg `-ss`; home row |
 | History | capped append log |
 | Global search | client-side over cached Live/VOD/Series metadata (`useSearch`), one box all sections |
-| Multi-account | `accounts` store; switching reloads `library` and swaps `data-<id>.json` |
+| Multi-account | `accounts` registry (`accounts.json`); active account = the active tab's account; per-account data in `data-<id>.json` |
+| Account tabs | explorer-style: one tab per opened account, open/close ≠ add/remove, persisted `tabs.json`, single account auto-opens; `core/accounts/tabs.ts` + `AccountTabBar` |
 | Player essentials | audio/subtitle track select, quality, keyboard shortcuts, fullscreen/PiP |
 | Hardware settings | GPU detect + method/device selection + software fallback |
 | Backup | encrypt → `StorageProvider`; list/restore |

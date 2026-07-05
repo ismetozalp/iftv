@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** An installable Cockpit plugin (Vue 3 + Vite + TypeScript + Bootstrap) that loads under Tools → InFlight TV, lets the user add/switch multiple Xtream accounts, authenticates them via `cockpit.http`, and persists accounts to `~/.config/inflighttv/accounts.json`.
+**Goal:** An installable Cockpit plugin (Vue 3 + Vite + TypeScript + Bootstrap) that loads under Tools → InFlight TV, lets the user add multiple Xtream accounts and open them in explorer-style tabs (a single account auto-opens), authenticates them via `cockpit.http`, and persists accounts and open tabs to `~/.config/cockpit/inflighttv/`.
 
 **Architecture:** A Cockpit static package built by Vite. Framework-agnostic core logic (`src/core/**`) is pure TypeScript with all host access injected via small interfaces, so it is unit-testable under Vitest without a browser or Cockpit. Vue views/stores sit on top. Host access (HTTP, file, user) is reached through `window.cockpit`, wrapped in typed adapters that implement the core interfaces.
 
@@ -17,7 +17,8 @@
 - `cockpit` is never bundled: loaded via `<script src="../base1/cockpit.js">`; `import cockpit from 'cockpit'` is aliased to `window.cockpit`.
 - Core modules under `src/core/**` must NOT import Vue, Pinia, or `window.cockpit` directly — all host access is injected via interfaces. This keeps them unit-testable.
 - No monolithic files: one clear responsibility per file (per project preference).
-- Persisted state dir: `~/.config/inflighttv/`. Accounts file: `accounts.json`.
+- Persisted state dir: `~/.config/cockpit/inflighttv/`. Accounts registry: `accounts.json`. Open tabs + active tab: `tabs.json`.
+- Account tabs are explorer-style: one tab per opened account; open/close is separate from add/remove (closing a tab does NOT delete the account); open tabs + active tab persist; when exactly one account exists it is auto-opened. The accounts core is registry-only; the tabs module owns open/active state.
 - License: Apache-2.0 chosen on GitHub at first release; do NOT commit a `LICENSE` file.
 - Commit after every task. Do not push to any remote in this plan.
 
@@ -760,7 +761,7 @@ git commit -m "feat: add Xtream login with normalized auth result"
 - Produces:
   - `interface JsonStore { load<T>(name: string, fallback: T): Promise<T>; save<T>(name: string, value: T): Promise<void> }`
   - `createMemoryStore(seed?: Record<string, unknown>): JsonStore` — in-memory implementation (used in tests and by later tasks' tests).
-  - `src/adapters/cockpitFile.ts` exports `async function createCockpitStore(): Promise<JsonStore>` — resolves the user's home via `cockpit.user()`, reads/writes `~/.config/inflighttv/<name>` via `cockpit.file(path, { syntax: JSON })`. Not unit-tested (needs Cockpit).
+  - `src/adapters/cockpitFile.ts` exports `async function createCockpitStore(): Promise<JsonStore>` — resolves the user's home via `cockpit.user()`, reads/writes `~/.config/cockpit/inflighttv/<name>` via `cockpit.file(path, { syntax: JSON })`. Not unit-tested (needs Cockpit).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -837,7 +838,7 @@ const JSON_SYNTAX = { parse: (s: string) => JSON.parse(s), stringify: (o: unknow
 
 export async function createCockpitStore(): Promise<JsonStore> {
   const user = await cockpit.user()
-  const dir = `${user.home}/.config/inflighttv`
+  const dir = `${user.home}/.config/cockpit/inflighttv`
   await cockpit.spawn(['mkdir', '-p', dir])
   const pathOf = (name: string) => `${dir}/${name}`
   return {
@@ -1058,103 +1059,472 @@ git commit -m "feat: add accounts core CRUD, active selection, and persistence"
 
 ---
 
-### Task 7: Accounts store + UI (add / switch / verify), wired to Cockpit
+### Task 7: Accounts registry (registry-only) + tabs core
 
 **Files:**
-- Create: `src/stores/accounts.ts`, `src/composables/useHost.ts`
-- Modify: `src/views/accounts/AccountsView.vue` (replace placeholder), `src/views/home/HomeView.vue`
-- Test: `src/stores/accounts.test.ts`
+- Modify: `src/core/accounts/accounts.ts`, `src/core/accounts/accounts.test.ts`
+- Create: `src/core/accounts/tabs.ts`, `src/core/accounts/tabs.test.ts`
 
 **Interfaces:**
-- Consumes: accounts core (Task 6), `xtreamLogin` (Task 4), `createMemoryStore`/`JsonStore` (Task 5), `XtreamTransport` (Task 3), Cockpit adapters (Tasks 3, 5).
+- Consumes: `JsonStore`, `createMemoryStore` (Task 5); `Account`, `NewAccount` (Task 6).
 - Produces:
-  - `useHost()` composable returning `{ store: JsonStore; transport: XtreamTransport }`, lazily constructing the Cockpit-backed implementations once. Injectable for tests.
-  - Pinia store `useAccountsStore` with state `{ state: AccountsState; loading: boolean }`, getters `active`, and actions `init()`, `add(input, verify)`, `remove(id)`, `select(id)`, `verify(input): Promise<XtreamAuth>`.
-  - The store accepts an injected `{ store, transport, ids }` for tests; in the app it defaults to `useHost()` + real id/date generators.
+  - `accounts.ts` becomes **registry-only**. `AccountsState` is now `{ accounts: Account[] }` — the `activeId` field, `setActive`, and `getActive` are **REMOVED** (open/active state now lives in the tabs module). `addAccount(state, input, meta)` appends only; `removeAccount(state, id)` filters only. New `findAccount(accounts: Account[], id: string | null): Account | null`. `loadAccounts`/`saveAccounts` keep key `accounts.json` but the state shape drops `activeId`.
+  - `tabs.ts`: `interface TabsState { openTabIds: string[]; activeTabId: string | null }`, `EMPTY_TABS`, and pure `openTab(state, accountId)` (dedupe + focus), `closeTab(state, accountId)` (remove + focus right neighbour, else left, else null), `activateTab(state, accountId)` (only if open), `reconcileTabs(state, accountIds: string[])` (drop stale tabs, auto-open the sole account when none open, repair invalid `activeTabId`), `loadTabs(store)`/`saveTabs(store, state)` (key `tabs.json`).
 
-- [ ] **Step 1: Write the failing test for the store (with injected deps)**
+**Rationale:** the explorer-style tab bar is the single source of truth for which accounts are open and which is focused, so the accounts core keeps only the registry and the tabs module owns open/active. No built code depends on `accounts.activeId` yet (the store that consumes it is written fresh in Task 8), so removing it now is safe.
 
-`src/stores/accounts.test.ts`:
+- [ ] **Step 1: Rewrite `src/core/accounts/accounts.ts` (registry-only)**
+
+```ts
+import type { JsonStore } from '@/core/storage/appState'
+
+export interface Account {
+  id: string
+  name: string
+  url: string
+  username: string
+  password: string
+  createdAt: number
+}
+
+export interface AccountsState {
+  accounts: Account[]
+}
+
+export interface NewAccount {
+  name: string
+  url: string
+  username: string
+  password: string
+}
+
+export const EMPTY_ACCOUNTS: AccountsState = { accounts: [] }
+
+export function addAccount(state: AccountsState, input: NewAccount, meta: { id: string; createdAt: number }): AccountsState {
+  const account: Account = { id: meta.id, createdAt: meta.createdAt, ...input }
+  return { accounts: [...state.accounts, account] }
+}
+
+export function removeAccount(state: AccountsState, id: string): AccountsState {
+  return { accounts: state.accounts.filter((a) => a.id !== id) }
+}
+
+export function findAccount(accounts: Account[], id: string | null): Account | null {
+  return accounts.find((a) => a.id === id) ?? null
+}
+
+const ACCOUNTS_KEY = 'accounts.json'
+
+export async function loadAccounts(store: JsonStore): Promise<AccountsState> {
+  const s = await store.load<AccountsState>(ACCOUNTS_KEY, EMPTY_ACCOUNTS)
+  // Never hand back the shared singleton (or the loaded object) by reference.
+  return { accounts: [...s.accounts] }
+}
+
+export async function saveAccounts(store: JsonStore, state: AccountsState): Promise<void> {
+  await store.save(ACCOUNTS_KEY, state)
+}
+```
+
+- [ ] **Step 2: Rewrite `src/core/accounts/accounts.test.ts` to match (drop active tests, add `findAccount`)**
+
+```ts
+import { describe, it, expect } from 'vitest'
+import {
+  EMPTY_ACCOUNTS, addAccount, removeAccount, findAccount,
+  loadAccounts, saveAccounts,
+} from './accounts'
+import { createMemoryStore } from '@/core/storage/appState'
+
+const NEW = { name: 'P1', url: 'http://h:8080', username: 'u', password: 'p' }
+
+describe('addAccount', () => {
+  it('appends a new account', () => {
+    const s = addAccount(EMPTY_ACCOUNTS, NEW, { id: 'a1', createdAt: 100 })
+    expect(s.accounts).toHaveLength(1)
+    expect(s.accounts[0]).toEqual({ id: 'a1', createdAt: 100, ...NEW })
+  })
+  it('appends a second without touching the first', () => {
+    let s = addAccount(EMPTY_ACCOUNTS, NEW, { id: 'a1', createdAt: 100 })
+    s = addAccount(s, { ...NEW, name: 'P2' }, { id: 'a2', createdAt: 200 })
+    expect(s.accounts.map((a) => a.id)).toEqual(['a1', 'a2'])
+  })
+  it('does not mutate input state', () => {
+    const s = addAccount(EMPTY_ACCOUNTS, NEW, { id: 'a1', createdAt: 100 })
+    expect(EMPTY_ACCOUNTS.accounts).toHaveLength(0)
+    expect(s).not.toBe(EMPTY_ACCOUNTS)
+  })
+})
+
+describe('removeAccount', () => {
+  it('removes by id without mutating input', () => {
+    const s1 = addAccount(EMPTY_ACCOUNTS, NEW, { id: 'a1', createdAt: 1 })
+    const s2 = removeAccount(s1, 'a1')
+    expect(s2.accounts).toHaveLength(0)
+    expect(s1.accounts).toHaveLength(1)
+  })
+})
+
+describe('findAccount', () => {
+  it('returns the matching account or null', () => {
+    const s = addAccount(EMPTY_ACCOUNTS, NEW, { id: 'a1', createdAt: 1 })
+    expect(findAccount(s.accounts, 'a1')?.id).toBe('a1')
+    expect(findAccount(s.accounts, 'nope')).toBeNull()
+    expect(findAccount(s.accounts, null)).toBeNull()
+  })
+})
+
+describe('load/save round-trip', () => {
+  it('persists via a JsonStore', async () => {
+    const store = createMemoryStore()
+    const s = addAccount(EMPTY_ACCOUNTS, NEW, { id: 'a1', createdAt: 1 })
+    await saveAccounts(store, s)
+    expect(await loadAccounts(store)).toEqual(s)
+  })
+  it('returns EMPTY when nothing saved', async () => {
+    expect(await loadAccounts(createMemoryStore())).toEqual(EMPTY_ACCOUNTS)
+  })
+  it('never returns the shared EMPTY_ACCOUNTS singleton on a fresh store', async () => {
+    const loaded = await loadAccounts(createMemoryStore())
+    expect(loaded).toEqual(EMPTY_ACCOUNTS)
+    expect(loaded).not.toBe(EMPTY_ACCOUNTS)
+    loaded.accounts.push({ id: 'x', name: '', url: '', username: '', password: '', createdAt: 0 })
+    expect(EMPTY_ACCOUNTS.accounts).toHaveLength(0)
+  })
+})
+```
+
+- [ ] **Step 3: Run the accounts tests → GREEN**
+
+Run: `npm run test -- accounts`
+Expected: PASS. (The old `setActive`/`getActive`/active-selection cases are gone; new `findAccount` + registry cases pass.)
+
+- [ ] **Step 4: Write the failing tabs test**
+
+`src/core/accounts/tabs.test.ts`:
+```ts
+import { describe, it, expect } from 'vitest'
+import {
+  EMPTY_TABS, openTab, closeTab, activateTab, reconcileTabs,
+  loadTabs, saveTabs,
+} from './tabs'
+import { createMemoryStore } from '@/core/storage/appState'
+
+describe('openTab', () => {
+  it('opens a new tab and focuses it', () => {
+    const s = openTab(EMPTY_TABS, 'a1')
+    expect(s.openTabIds).toEqual(['a1'])
+    expect(s.activeTabId).toBe('a1')
+  })
+  it('does not duplicate an open tab but refocuses it', () => {
+    let s = openTab(EMPTY_TABS, 'a1')
+    s = openTab(s, 'a2')
+    s = openTab(s, 'a1')
+    expect(s.openTabIds).toEqual(['a1', 'a2'])
+    expect(s.activeTabId).toBe('a1')
+  })
+  it('does not mutate input', () => {
+    const s = openTab(EMPTY_TABS, 'a1')
+    expect(EMPTY_TABS.openTabIds).toHaveLength(0)
+    expect(s).not.toBe(EMPTY_TABS)
+  })
+})
+
+describe('closeTab', () => {
+  it('removes the tab and focuses the right neighbour', () => {
+    let s = openTab(EMPTY_TABS, 'a1')
+    s = openTab(s, 'a2')
+    s = openTab(s, 'a3')
+    s = activateTab(s, 'a2')
+    s = closeTab(s, 'a2')
+    expect(s.openTabIds).toEqual(['a1', 'a3'])
+    expect(s.activeTabId).toBe('a3')
+  })
+  it('focuses the left neighbour when closing the last (active) tab', () => {
+    let s = openTab(EMPTY_TABS, 'a1')
+    s = openTab(s, 'a2')
+    s = closeTab(s, 'a2')
+    expect(s.openTabIds).toEqual(['a1'])
+    expect(s.activeTabId).toBe('a1')
+  })
+  it('active becomes null when the only tab is closed', () => {
+    let s = openTab(EMPTY_TABS, 'a1')
+    s = closeTab(s, 'a1')
+    expect(s.openTabIds).toEqual([])
+    expect(s.activeTabId).toBeNull()
+  })
+  it('keeps active unchanged when closing a non-active tab', () => {
+    let s = openTab(EMPTY_TABS, 'a1')
+    s = openTab(s, 'a2')
+    s = closeTab(s, 'a1')
+    expect(s.openTabIds).toEqual(['a2'])
+    expect(s.activeTabId).toBe('a2')
+  })
+  it('is a no-op for a tab that is not open', () => {
+    const s = openTab(EMPTY_TABS, 'a1')
+    expect(closeTab(s, 'nope')).toBe(s)
+  })
+})
+
+describe('activateTab', () => {
+  it('activates only an open tab', () => {
+    let s = openTab(EMPTY_TABS, 'a1')
+    s = openTab(s, 'a2')
+    expect(activateTab(s, 'a1').activeTabId).toBe('a1')
+    expect(activateTab(s, 'nope')).toBe(s)
+  })
+})
+
+describe('reconcileTabs', () => {
+  it('drops tabs whose account no longer exists', () => {
+    let s = openTab(EMPTY_TABS, 'a1')
+    s = openTab(s, 'a2')
+    const r = reconcileTabs(s, ['a1'])
+    expect(r.openTabIds).toEqual(['a1'])
+    expect(r.activeTabId).toBe('a1')
+  })
+  it('auto-opens the sole account when nothing is open', () => {
+    const r = reconcileTabs(EMPTY_TABS, ['only'])
+    expect(r.openTabIds).toEqual(['only'])
+    expect(r.activeTabId).toBe('only')
+  })
+  it('does not auto-open when several accounts exist and none are open', () => {
+    const r = reconcileTabs(EMPTY_TABS, ['a1', 'a2'])
+    expect(r.openTabIds).toEqual([])
+    expect(r.activeTabId).toBeNull()
+  })
+  it('repairs an invalid activeTabId to the first open tab', () => {
+    const s = { openTabIds: ['a1', 'a2'], activeTabId: 'gone' }
+    expect(reconcileTabs(s, ['a1', 'a2']).activeTabId).toBe('a1')
+  })
+})
+
+describe('loadTabs/saveTabs', () => {
+  it('persists under tabs.json and reloads', async () => {
+    const store = createMemoryStore()
+    const s = openTab(EMPTY_TABS, 'a1')
+    await saveTabs(store, s)
+    expect(await loadTabs(store)).toEqual(s)
+  })
+  it('returns a fresh EMPTY_TABS shape when nothing saved', async () => {
+    const loaded = await loadTabs(createMemoryStore())
+    expect(loaded).toEqual(EMPTY_TABS)
+    expect(loaded.openTabIds).not.toBe(EMPTY_TABS.openTabIds)
+  })
+})
+```
+
+- [ ] **Step 5: Run the tabs test → RED**
+
+Run: `npm run test -- tabs`
+Expected: FAIL — `Cannot find module './tabs'`.
+
+- [ ] **Step 6: Write `src/core/accounts/tabs.ts`**
+
+```ts
+import type { JsonStore } from '@/core/storage/appState'
+
+export interface TabsState {
+  openTabIds: string[]
+  activeTabId: string | null
+}
+
+export const EMPTY_TABS: TabsState = { openTabIds: [], activeTabId: null }
+
+export function openTab(state: TabsState, accountId: string): TabsState {
+  const openTabIds = state.openTabIds.includes(accountId)
+    ? state.openTabIds
+    : [...state.openTabIds, accountId]
+  return { openTabIds, activeTabId: accountId }
+}
+
+export function closeTab(state: TabsState, accountId: string): TabsState {
+  const idx = state.openTabIds.indexOf(accountId)
+  if (idx === -1) return state
+  const openTabIds = state.openTabIds.filter((id) => id !== accountId)
+  let activeTabId = state.activeTabId
+  if (activeTabId === accountId) {
+    // focus the neighbour: the tab that shifted into this slot (right), else the left, else none
+    activeTabId = openTabIds[idx] ?? openTabIds[idx - 1] ?? null
+  }
+  return { openTabIds, activeTabId }
+}
+
+export function activateTab(state: TabsState, accountId: string): TabsState {
+  if (!state.openTabIds.includes(accountId)) return state
+  return { ...state, activeTabId: accountId }
+}
+
+// Reconcile persisted tabs against the current accounts: drop tabs for accounts
+// that no longer exist, auto-open the sole account when nothing is open, and make
+// sure activeTabId points at an open tab.
+export function reconcileTabs(state: TabsState, accountIds: string[]): TabsState {
+  const ids = new Set(accountIds)
+  let openTabIds = state.openTabIds.filter((id) => ids.has(id))
+  if (openTabIds.length === 0 && accountIds.length === 1) {
+    openTabIds = [accountIds[0]]
+  }
+  let activeTabId = state.activeTabId
+  if (activeTabId === null || !openTabIds.includes(activeTabId)) {
+    activeTabId = openTabIds.length ? openTabIds[0] : null
+  }
+  return { openTabIds, activeTabId }
+}
+
+const TABS_KEY = 'tabs.json'
+
+export async function loadTabs(store: JsonStore): Promise<TabsState> {
+  const s = await store.load<TabsState>(TABS_KEY, EMPTY_TABS)
+  return { openTabIds: [...s.openTabIds], activeTabId: s.activeTabId ?? null }
+}
+
+export async function saveTabs(store: JsonStore, state: TabsState): Promise<void> {
+  await store.save(TABS_KEY, state)
+}
+```
+
+- [ ] **Step 7: Run the tabs test → GREEN**
+
+Run: `npm run test -- tabs`
+Expected: PASS (all cases).
+
+- [ ] **Step 8: Typecheck**
+
+Run: `npm run typecheck`
+Expected: clean.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add src/core/accounts/accounts.ts src/core/accounts/accounts.test.ts \
+  src/core/accounts/tabs.ts src/core/accounts/tabs.test.ts
+git commit -m "feat: make accounts core registry-only and add tabs core"
+```
+
+---
+
+### Task 8: Workspace store + tab bar + accounts manager UI (wired to Cockpit)
+
+**Files:**
+- Create: `src/composables/useHost.ts`, `src/stores/workspace.ts`, `src/components/AccountTabBar.vue`
+- Modify: `src/App.vue`, `src/views/home/HomeView.vue`, `src/views/accounts/AccountsView.vue`, `src/styles/app.css`
+- Test: `src/stores/workspace.test.ts`
+
+**Interfaces:**
+- Consumes: accounts core + tabs core (Task 7); `xtreamLogin` (Task 4); `createMemoryStore`/`JsonStore` (Task 5); `XtreamTransport` (Task 3); Cockpit adapters (Tasks 3, 5).
+- Produces:
+  - `useHost(): Promise<{ store: JsonStore; transport: XtreamTransport }>` — lazily builds Cockpit-backed impls once.
+  - Pinia `useWorkspaceStore` with state `{ accounts: AccountsState; tabs: TabsState; loading }`, getters `allAccounts: Account[]`, `openTabs: Account[]`, `activeAccount: Account | null`, and actions `$configure(deps)`, `init()`, `verify(input): Promise<XtreamAuth>`, `add(input, verify)`, `remove(id)`, `open(id)`, `close(id)`, `activate(id)`. `$configure` injects `{ store, transport, ids }` for tests; the app path uses `useHost()` + real id/date generators.
+
+- [ ] **Step 1: Write the failing store test (injected deps)**
+
+`src/stores/workspace.test.ts`:
 ```ts
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useAccountsStore } from './accounts'
+import { useWorkspaceStore } from './workspace'
 import { createMemoryStore } from '@/core/storage/appState'
 import type { XtreamTransport } from '@/core/xtream/transport'
 
 const NEW = { name: 'P1', url: 'http://h:8080', username: 'u', password: 'p' }
 
-function activeTransport(auth: number, status = 'Active'): XtreamTransport {
+function transport(auth: number, status = 'Active'): XtreamTransport {
   return { getJson: vi.fn(async () => ({ user_info: { auth, status } })) }
 }
-
-describe('useAccountsStore', () => {
-  beforeEach(() => setActivePinia(createPinia()))
-
-  it('loads empty state on init', async () => {
-    const s = useAccountsStore()
-    s.$configure({ store: createMemoryStore(), transport: activeTransport(1), ids: seq() })
-    await s.init()
-    expect(s.state.accounts).toHaveLength(0)
-    expect(s.active).toBeNull()
-  })
-
-  it('adds an account, persists it, and makes it active', async () => {
-    const store = createMemoryStore()
-    const s = useAccountsStore()
-    s.$configure({ store, transport: activeTransport(1), ids: seq() })
-    await s.init()
-    await s.add(NEW, false)
-    expect(s.state.accounts).toHaveLength(1)
-    expect(s.active?.name).toBe('P1')
-    // reload a fresh store from the same backing store
-    const s2 = useAccountsStore()
-    s2.$configure({ store, transport: activeTransport(1), ids: seq() })
-    await s2.init()
-    expect(s2.state.accounts).toHaveLength(1)
-  })
-
-  it('verify returns active=false for auth=0', async () => {
-    const s = useAccountsStore()
-    s.$configure({ store: createMemoryStore(), transport: activeTransport(0, 'Disabled'), ids: seq() })
-    await s.init()
-    const res = await s.verify(NEW)
-    expect(res.active).toBe(false)
-  })
-
-  it('add with verify=true throws when credentials are inactive', async () => {
-    const s = useAccountsStore()
-    s.$configure({ store: createMemoryStore(), transport: activeTransport(0), ids: seq() })
-    await s.init()
-    await expect(s.add(NEW, true)).rejects.toThrow(/not active/i)
-    expect(s.state.accounts).toHaveLength(0)
-  })
-
-  it('select switches active only to existing ids', async () => {
-    const s = useAccountsStore()
-    s.$configure({ store: createMemoryStore(), transport: activeTransport(1), ids: seq() })
-    await s.init()
-    await s.add(NEW, false)
-    await s.add({ ...NEW, name: 'P2' }, false)
-    s.select(s.state.accounts[1].id)
-    expect(s.active?.name).toBe('P2')
-  })
-})
-
 function seq() {
   let n = 0
   return () => ({ id: `id${++n}`, createdAt: n })
 }
+
+describe('useWorkspaceStore', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('init on empty store yields no accounts and no active tab', async () => {
+    const s = useWorkspaceStore()
+    s.$configure({ store: createMemoryStore(), transport: transport(1), ids: seq() })
+    await s.init()
+    expect(s.allAccounts).toHaveLength(0)
+    expect(s.openTabs).toHaveLength(0)
+    expect(s.activeAccount).toBeNull()
+  })
+
+  it('add opens the new account in a tab and makes it active', async () => {
+    const s = useWorkspaceStore()
+    s.$configure({ store: createMemoryStore(), transport: transport(1), ids: seq() })
+    await s.init()
+    await s.add(NEW, false)
+    expect(s.allAccounts).toHaveLength(1)
+    expect(s.openTabs.map((a) => a.id)).toEqual(['id1'])
+    expect(s.activeAccount?.name).toBe('P1')
+  })
+
+  it('persists accounts and tabs across a reload', async () => {
+    const store = createMemoryStore()
+    const s = useWorkspaceStore()
+    s.$configure({ store, transport: transport(1), ids: seq() })
+    await s.init()
+    await s.add(NEW, false)
+    const s2 = useWorkspaceStore()
+    s2.$configure({ store, transport: transport(1), ids: seq() })
+    await s2.init()
+    expect(s2.allAccounts).toHaveLength(1)
+    expect(s2.activeAccount?.id).toBe('id1')
+  })
+
+  it('auto-opens a sole account on init even when no tabs were stored', async () => {
+    const store = createMemoryStore()
+    await store.save('accounts.json', {
+      accounts: [{ id: 'solo', name: 'S', url: 'http://h', username: 'u', password: 'p', createdAt: 1 }],
+    })
+    const s = useWorkspaceStore()
+    s.$configure({ store, transport: transport(1), ids: seq() })
+    await s.init()
+    expect(s.openTabs.map((a) => a.id)).toEqual(['solo'])
+    expect(s.activeAccount?.id).toBe('solo')
+  })
+
+  it('add with verify=true throws and adds nothing when inactive', async () => {
+    const s = useWorkspaceStore()
+    s.$configure({ store: createMemoryStore(), transport: transport(0), ids: seq() })
+    await s.init()
+    await expect(s.add(NEW, true)).rejects.toThrow(/not active/i)
+    expect(s.allAccounts).toHaveLength(0)
+  })
+
+  it('close hides a tab without deleting the account; open re-adds it', async () => {
+    const s = useWorkspaceStore()
+    s.$configure({ store: createMemoryStore(), transport: transport(1), ids: seq() })
+    await s.init()
+    await s.add(NEW, false)
+    await s.add({ ...NEW, name: 'P2' }, false)
+    await s.close('id1')
+    expect(s.openTabs.map((a) => a.id)).toEqual(['id2'])
+    expect(s.allAccounts).toHaveLength(2)
+    await s.open('id1')
+    expect(s.openTabs.map((a) => a.id)).toEqual(['id2', 'id1'])
+    expect(s.activeAccount?.id).toBe('id1')
+  })
+
+  it('remove deletes the account and closes its tab', async () => {
+    const s = useWorkspaceStore()
+    s.$configure({ store: createMemoryStore(), transport: transport(1), ids: seq() })
+    await s.init()
+    await s.add(NEW, false)
+    await s.remove('id1')
+    expect(s.allAccounts).toHaveLength(0)
+    expect(s.openTabs).toHaveLength(0)
+    expect(s.activeAccount).toBeNull()
+  })
+})
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run the store test → RED**
 
-Run: `npm run test -- stores/accounts`
-Expected: FAIL — `Cannot find module './accounts'` (the store).
+Run: `npm run test -- workspace`
+Expected: FAIL — `Cannot find module './workspace'`.
 
-- [ ] **Step 3: Write the composable and the store**
+- [ ] **Step 3: Create `src/composables/useHost.ts`**
 
-`src/composables/useHost.ts`:
 ```ts
 import type { JsonStore } from '@/core/storage/appState'
 import type { XtreamTransport } from '@/core/xtream/transport'
@@ -1171,16 +1541,21 @@ export async function useHost(): Promise<{ store: JsonStore; transport: XtreamTr
 }
 ```
 
-`src/stores/accounts.ts`:
+- [ ] **Step 4: Create `src/stores/workspace.ts`**
+
 ```ts
 import { defineStore } from 'pinia'
 import type { JsonStore } from '@/core/storage/appState'
 import type { XtreamTransport } from '@/core/xtream/transport'
 import { xtreamLogin, type XtreamAuth } from '@/core/xtream/auth'
 import {
-  EMPTY_ACCOUNTS, addAccount, removeAccount, setActive, getActive,
-  loadAccounts, saveAccounts, type AccountsState, type NewAccount,
+  EMPTY_ACCOUNTS, addAccount, removeAccount, findAccount,
+  loadAccounts, saveAccounts, type AccountsState, type Account, type NewAccount,
 } from '@/core/accounts/accounts'
+import {
+  EMPTY_TABS, openTab, closeTab, activateTab, reconcileTabs,
+  loadTabs, saveTabs, type TabsState,
+} from '@/core/accounts/tabs'
 import { useHost } from '@/composables/useHost'
 
 type IdGen = () => { id: string; createdAt: number }
@@ -1188,14 +1563,21 @@ interface Deps { store: JsonStore; transport: XtreamTransport; ids: IdGen }
 
 const defaultIds: IdGen = () => ({ id: crypto.randomUUID(), createdAt: Date.now() })
 
-export const useAccountsStore = defineStore('accounts', {
+export const useWorkspaceStore = defineStore('workspace', {
   state: () => ({
-    state: structuredClone(EMPTY_ACCOUNTS) as AccountsState,
+    accounts: structuredClone(EMPTY_ACCOUNTS) as AccountsState,
+    tabs: structuredClone(EMPTY_TABS) as TabsState,
     loading: false,
     _deps: null as Deps | null,
   }),
   getters: {
-    active: (s) => getActive(s.state),
+    allAccounts: (s): Account[] => s.accounts.accounts,
+    openTabs(s): Account[] {
+      return s.tabs.openTabIds
+        .map((id) => findAccount(s.accounts.accounts, id))
+        .filter((a): a is Account => a !== null)
+    },
+    activeAccount: (s): Account | null => findAccount(s.accounts.accounts, s.tabs.activeTabId),
   },
   actions: {
     $configure(deps: Deps) {
@@ -1207,11 +1589,25 @@ export const useAccountsStore = defineStore('accounts', {
       this._deps = { ...host, ids: defaultIds }
       return this._deps
     },
+    async _persistAccounts() {
+      const { store } = await this._host()
+      await saveAccounts(store, this.accounts)
+    },
+    async _persistTabs() {
+      const { store } = await this._host()
+      await saveTabs(store, this.tabs)
+    },
     async init() {
       this.loading = true
       try {
         const { store } = await this._host()
-        this.state = await loadAccounts(store)
+        this.accounts = await loadAccounts(store)
+        const loaded = await loadTabs(store)
+        const reconciled = reconcileTabs(loaded, this.accounts.accounts.map((a) => a.id))
+        this.tabs = reconciled
+        if (JSON.stringify(reconciled) !== JSON.stringify(loaded)) {
+          await saveTabs(store, reconciled)
+        }
       } finally {
         this.loading = false
       }
@@ -1221,60 +1617,146 @@ export const useAccountsStore = defineStore('accounts', {
       return xtreamLogin(transport, input.url, input.username, input.password)
     },
     async add(input: NewAccount, verify: boolean) {
-      const { store, ids } = await this._host()
+      const { ids } = await this._host()
       if (verify) {
         const res = await this.verify(input)
         if (!res.active) throw new Error(`Account not active (auth=${res.auth}, status="${res.status}")`)
       }
-      this.state = addAccount(this.state, input, ids())
-      await saveAccounts(store, this.state)
+      const meta = ids()
+      this.accounts = addAccount(this.accounts, input, meta)
+      await this._persistAccounts()
+      this.tabs = openTab(this.tabs, meta.id)
+      await this._persistTabs()
     },
     async remove(id: string) {
-      const { store } = await this._host()
-      this.state = removeAccount(this.state, id)
-      await saveAccounts(store, this.state)
+      this.accounts = removeAccount(this.accounts, id)
+      await this._persistAccounts()
+      this.tabs = closeTab(this.tabs, id)
+      await this._persistTabs()
     },
-    async select(id: string) {
-      const { store } = await this._host()
-      this.state = setActive(this.state, id)
-      await saveAccounts(store, this.state)
+    async open(id: string) {
+      this.tabs = openTab(this.tabs, id)
+      await this._persistTabs()
+    },
+    async close(id: string) {
+      this.tabs = closeTab(this.tabs, id)
+      await this._persistTabs()
+    },
+    async activate(id: string) {
+      this.tabs = activateTab(this.tabs, id)
+      await this._persistTabs()
     },
   },
 })
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 5: Run the store test → GREEN**
 
-Run: `npm run test -- stores/accounts`
-Expected: PASS (all 5 cases).
+Run: `npm run test -- workspace`
+Expected: PASS (all 7 cases).
 
-- [ ] **Step 5: Build the Accounts view UI**
+- [ ] **Step 6: Build the tab bar + accounts manager + shell**
 
-`src/views/accounts/AccountsView.vue`:
+`src/components/AccountTabBar.vue`:
 ```vue
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
-import { useAccountsStore } from '@/stores/accounts'
+import { useWorkspaceStore } from '@/stores/workspace'
+const ws = useWorkspaceStore()
+</script>
 
-const accounts = useAccountsStore()
+<template>
+  <div class="iftv-tabbar d-flex align-items-center">
+    <div
+      v-for="acc in ws.openTabs"
+      :key="acc.id"
+      class="iftv-tab"
+      :class="{ active: acc.id === ws.tabs.activeTabId }"
+      @click="ws.activate(acc.id)"
+    >
+      <span class="iftv-tab-label">{{ acc.name }}</span>
+      <button class="iftv-tab-close" title="Close tab" @click.stop="ws.close(acc.id)">×</button>
+    </div>
+    <RouterLink class="iftv-tab-add btn btn-sm btn-link" to="/accounts" title="Manage accounts">＋ Accounts</RouterLink>
+  </div>
+</template>
+```
+
+`src/App.vue` (replace):
+```vue
+<script setup lang="ts">
+import { onMounted } from 'vue'
+import { RouterView } from 'vue-router'
+import AccountTabBar from '@/components/AccountTabBar.vue'
+import { useWorkspaceStore } from '@/stores/workspace'
+
+const ws = useWorkspaceStore()
+onMounted(() => ws.init())
+</script>
+
+<template>
+  <div class="iftv-shell">
+    <header class="iftv-header d-flex align-items-center gap-3">
+      <strong>InFlight TV</strong>
+      <AccountTabBar />
+    </header>
+    <main class="iftv-main">
+      <RouterView />
+    </main>
+  </div>
+</template>
+```
+
+`src/views/home/HomeView.vue` (replace):
+```vue
+<script setup lang="ts">
+import { useWorkspaceStore } from '@/stores/workspace'
+const ws = useWorkspaceStore()
+</script>
+
+<template>
+  <div>
+    <template v-if="ws.activeAccount">
+      <h4>{{ ws.activeAccount.name }}</h4>
+      <p class="text-muted">{{ ws.activeAccount.url }}</p>
+      <p class="text-muted">Live TV, VOD, and Series for this account arrive in the next milestone.</p>
+    </template>
+    <template v-else>
+      <h4>Welcome to InFlight TV</h4>
+      <p class="text-muted">No account open. Go to <RouterLink to="/accounts">Accounts</RouterLink> to add or open one.</p>
+    </template>
+  </div>
+</template>
+```
+
+`src/views/accounts/AccountsView.vue` (replace):
+```vue
+<script setup lang="ts">
+import { reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useWorkspaceStore } from '@/stores/workspace'
+
+const ws = useWorkspaceStore()
+const router = useRouter()
 const form = reactive({ name: '', url: '', username: '', password: '' })
 const busy = ref(false)
 const error = ref('')
-const ok = ref('')
-
-onMounted(() => accounts.init())
 
 async function submit() {
-  busy.value = true; error.value = ''; ok.value = ''
+  busy.value = true; error.value = ''
   try {
-    await accounts.add({ ...form }, true)
-    ok.value = 'Account added and verified.'
+    await ws.add({ ...form }, true)
     form.name = form.url = form.username = form.password = ''
+    router.push('/')
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
     busy.value = false
   }
+}
+
+async function openAccount(id: string) {
+  await ws.open(id)
+  router.push('/')
 }
 </script>
 
@@ -1290,20 +1772,19 @@ async function submit() {
         <button class="btn btn-primary" :disabled="busy">{{ busy ? 'Verifying…' : 'Add & verify' }}</button>
       </form>
       <div v-if="error" class="alert alert-danger mt-2">{{ error }}</div>
-      <div v-if="ok" class="alert alert-success mt-2">{{ ok }}</div>
     </div>
     <div class="col-md-7">
       <h5>Accounts</h5>
-      <p v-if="!accounts.state.accounts.length" class="text-muted">None yet.</p>
+      <p v-if="!ws.allAccounts.length" class="text-muted">None yet.</p>
       <ul class="list-group">
-        <li v-for="a in accounts.state.accounts" :key="a.id"
-            class="list-group-item d-flex justify-content-between align-items-center"
-            :class="{ active: a.id === accounts.state.activeId }">
-          <span>{{ a.name }} <small class="text-muted">{{ a.url }}</small></span>
+        <li v-for="a in ws.allAccounts" :key="a.id" class="list-group-item d-flex justify-content-between align-items-center">
+          <span>
+            {{ a.name }} <small class="text-muted">{{ a.url }}</small>
+            <span v-if="ws.tabs.openTabIds.includes(a.id)" class="badge bg-secondary ms-2">open</span>
+          </span>
           <span class="btn-group btn-group-sm">
-            <button class="btn btn-outline-primary" @click="accounts.select(a.id)"
-                    :disabled="a.id === accounts.state.activeId">Use</button>
-            <button class="btn btn-outline-danger" @click="accounts.remove(a.id)">Remove</button>
+            <button class="btn btn-outline-primary" @click="openAccount(a.id)">Open</button>
+            <button class="btn btn-outline-danger" @click="ws.remove(a.id)">Remove</button>
           </span>
         </li>
       </ul>
@@ -1312,52 +1793,49 @@ async function submit() {
 </template>
 ```
 
-Update `src/views/home/HomeView.vue`:
-```vue
-<script setup lang="ts">
-import { onMounted } from 'vue'
-import { useAccountsStore } from '@/stores/accounts'
-const accounts = useAccountsStore()
-onMounted(() => accounts.init())
-</script>
-
-<template>
-  <div>
-    <h4>Welcome to InFlight TV</h4>
-    <p v-if="accounts.active" class="text-success">Active account: {{ accounts.active.name }}</p>
-    <p v-else class="text-muted">No active account. Go to <RouterLink to="/accounts">Accounts</RouterLink> to add one.</p>
-  </div>
-</template>
+Append to `src/styles/app.css`:
+```css
+.iftv-tabbar { gap: 0.25rem; flex-wrap: wrap; }
+.iftv-tab { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.6rem; border: 1px solid var(--bs-border-color); border-radius: 0.3rem; cursor: pointer; font-size: 0.9rem; }
+.iftv-tab.active { background: var(--bs-primary); color: #fff; border-color: var(--bs-primary); }
+.iftv-tab-close { border: none; background: transparent; color: inherit; line-height: 1; padding: 0; cursor: pointer; font-size: 1.1rem; }
+.iftv-tab-add { text-decoration: none; }
 ```
 
-- [ ] **Step 6: Typecheck, build, and verify in Cockpit (manual, needs a real Xtream account)**
+- [ ] **Step 7: Typecheck + build**
 
 Run: `npm run typecheck && npm run build`
-Expected: no type errors; `dist/` rebuilt.
+Expected: clean; `dist/` rebuilt.
 
-Manual: reload Cockpit → InFlight TV → Accounts. Enter a real Xtream URL/user/pass → "Add & verify" → account appears and Home shows it active. Enter bad creds → red "Account not active" error, account NOT added. Confirm the file exists:
+- [ ] **Step 8: Manual verification in Cockpit (needs a real Xtream account)**
+
+Reload Cockpit → InFlight TV. Then:
+- Go to **＋ Accounts** → add a real Xtream URL/user/pass → "Add & verify". A tab appears, becomes active, Home shows the account. `~/.config/cockpit/inflighttv/accounts.json` and `tabs.json` exist.
+- Add a second account → second tab, active.
+- **Close** the first tab (×) → tab disappears, but the account still shows in the Accounts list with an "open" badge only on the still-open one; the account is NOT deleted.
+- **Open** it again from the Accounts list → tab reappears and activates.
+- **Remove** an account → it disappears from the list and its tab closes.
+- With exactly one account, reload Cockpit → that account's tab is auto-opened.
+- Bad credentials → red "Account not active" error, nothing added. No console CSP errors.
+
+- [ ] **Step 9: Commit**
+
 ```bash
-cat ~/.config/inflighttv/accounts.json
-```
-Expected: JSON with your account (no console CSP errors).
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add src/stores/accounts.ts src/stores/accounts.test.ts src/composables/useHost.ts \
-  src/views/accounts/AccountsView.vue src/views/home/HomeView.vue
-git commit -m "feat: accounts store and add/switch/verify UI wired to Cockpit"
+git add src/composables/useHost.ts src/stores/workspace.ts src/stores/workspace.test.ts \
+  src/components/AccountTabBar.vue src/App.vue src/views/home/HomeView.vue \
+  src/views/accounts/AccountsView.vue src/styles/app.css
+git commit -m "feat: workspace store, account tab bar, and accounts manager UI"
 ```
 
 ---
 
-### Task 8: Packaging (Makefile) + smoke test + README
+### Task 9: Packaging (Makefile) + smoke test + README
 
 **Files:**
 - Create: `Makefile`, `tests/smoke.mjs`, `README.md`
 
 **Interfaces:**
-- Consumes: the build (`npm run build` → `dist/`).
+- Consumes: the build (`npm run build` → `dist/`), the workspace UI (Task 8).
 - Produces: `make install`, `make zip`, `make dev-link`; a Playwright smoke test; project README.
 
 - [ ] **Step 1: Create the Makefile**
@@ -1420,7 +1898,8 @@ clean:
 `tests/smoke.mjs`:
 ```js
 // Smoke test: serves dist/ as a plain static site with a stubbed cockpit.js and
-// asserts the SPA mounts and renders the shell + accounts form. Does NOT touch a real Cockpit.
+// asserts the SPA mounts, renders the shell + tab bar, and the accounts manager form.
+// Does NOT touch a real Cockpit.
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
@@ -1437,7 +1916,7 @@ const COCKPIT_STUB = `window.cockpit = {
 
 const server = createServer(async (req, res) => {
   let path = req.url === '/' ? '/index.html' : req.url.split('?')[0]
-  if (path === '/../base1/cockpit.js' || path.endsWith('/base1/cockpit.js')) {
+  if (path.endsWith('/base1/cockpit.js')) {
     res.setHeader('content-type', 'text/javascript'); res.end(COCKPIT_STUB); return
   }
   try {
@@ -1455,6 +1934,7 @@ const errors = []
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
 await page.goto(`http://localhost:${port}/index.html`)
 await page.waitForSelector('text=InFlight TV')
+await page.waitForSelector('.iftv-tabbar')
 await page.goto(`http://localhost:${port}/index.html#/accounts`)
 await page.waitForSelector('input[placeholder="http://host:port"]')
 await browser.close()
@@ -1466,7 +1946,7 @@ console.log('smoke OK')
 - [ ] **Step 3: Run the smoke test**
 
 Run: `npm run build && npx playwright install chromium && npm run test:smoke`
-Expected: prints `smoke OK`, exit 0. (The stubbed `cockpit.js` replaces the `../base1/cockpit.js` include; the SPA mounts and the accounts form renders.)
+Expected: prints `smoke OK`, exit 0.
 
 - [ ] **Step 4: Write the README**
 
@@ -1476,14 +1956,14 @@ Expected: prints `smoke OK`, exit 0. (The stubbed `cockpit.js` replaces the `../
 
 A Cockpit plugin that turns any Xtream Codes IPTV subscription into a browser TV client
 (Live TV, VOD, Series, EPG) with favorites, custom lists, watch-later, continue-watching,
-multiple accounts, GPU-accelerated transcoding, and encrypted cloud backup.
+multiple accounts opened in tabs, GPU-accelerated transcoding, and encrypted cloud backup.
 
 > Named for Cockpit ("in-flight") — it is not for aircraft use.
 
 ## Requirements
-- Cockpit ≥ 215
+- Cockpit >= 215
 - `ffmpeg` on the host (used for stream remux/transcode; added in a later milestone)
-- Node ≥ 20 to build
+- Node >= 20 to build
 
 ## Develop
 ```bash
@@ -1491,7 +1971,7 @@ npm install
 make dev-link      # builds dist/ and symlinks it into ~/.local/share/cockpit/inflighttv
 npm run dev:watch  # rebuild on save; reload the Cockpit tab
 ```
-Open Cockpit → Tools → **InFlight TV**.
+Open Cockpit -> Tools -> **InFlight TV**.
 
 ## Install (system-wide)
 ```bash
@@ -1521,18 +2001,19 @@ git commit -m "chore: add Makefile packaging, smoke test, and README"
 ## Self-Review
 
 **Spec coverage (Plan 1 slice):**
-- Cockpit package + Vue/Vite/TS/Bootstrap build & load → Task 1. ✓
-- `cockpit.http` metadata path + auth → Tasks 3, 4. ✓
-- Persistence via `cockpit.file` JSON in `~/.config/inflighttv/` → Task 5. ✓
-- Multi-account save/switch (spec §5 accounts.json, §6 multi-account) → Tasks 6, 7. ✓
-- Xtream normalization/null-guarding (spec §7 robustness) → Task 2. ✓
-- Packaging/Makefile/CSP/manifest (spec §8) → Tasks 1, 8. ✓
-- Testing approach (spec §11: Vitest core + Playwright smoke, mocked Xtream) → all core tasks + Task 8. ✓
-- Feature-sliced structure, no monoliths (spec §4) → directory layout across tasks. ✓
-- Deferred to later plans (correctly out of this slice): browsing, EPG, media engine, favorites/lists/watch-later/history, backup, hardware settings.
+- Cockpit package + Vue/Vite/TS/Bootstrap build & load -> Task 1. OK
+- `cockpit.http` metadata path + auth -> Tasks 3, 4. OK
+- Persistence via `cockpit.file` JSON in `~/.config/cockpit/inflighttv/` -> Task 5 (+ `tabs.json` in Task 7). OK
+- Multi-account save/switch (spec accounts.json, multi-account) -> Tasks 6, 7, 8. OK
+- Account tabs (explorer-style open/close, one per account, close != delete, persisted open tabs + active tab, single account auto-opens) -> Task 7 (tabs core) + Task 8 (store + tab bar UI). OK
+- Xtream normalization/null-guarding -> Task 2. OK
+- Packaging/Makefile/CSP/manifest -> Tasks 1, 9. OK
+- Testing approach (Vitest core + Playwright smoke, mocked Xtream) -> all core tasks + Task 9. OK
+- Feature-sliced structure, no monoliths -> directory layout across tasks. OK
+- Deferred to later plans: browsing, EPG, media engine, favorites/lists/watch-later/history, backup, hardware settings.
 
-**Placeholder scan:** No "TBD/TODO/handle edge cases" in steps; every code step shows full code. The two non-unit-tested adapters (`cockpitHttp.ts`, `cockpitFile.ts`) are exercised by manual verification in Tasks 6–7 (documented), which is correct since they require a live Cockpit.
+**Placeholder scan:** No "TBD/TODO/handle edge cases" in steps; every code step shows full code. Non-unit-tested adapters (`cockpitHttp.ts`, `cockpitFile.ts`) are exercised by manual verification in Task 8.
 
-**Type consistency:** `XtreamTransport.getJson`, `XtreamAuth`, `Account`/`AccountsState`/`NewAccount`, `JsonStore.load/save`, and store actions (`init/add/remove/select/verify/$configure`) are referenced identically across Tasks 3–7. `createMemoryStore` is defined in Task 5 and reused in Tasks 6–7 tests. `useHost()` returns `{ store, transport }` consumed by the store's `_host()`.
+**Type consistency:** `AccountsState` is `{ accounts: Account[] }` from Task 7 onward (the `activeId` field is removed in Task 7 and never referenced afterward). `TabsState`, `openTab/closeTab/activateTab/reconcileTabs`, `loadTabs/saveTabs`, `findAccount`, and the store getters/actions (`allAccounts`, `openTabs`, `activeAccount`, `init/add/remove/open/close/activate/verify/$configure`) are referenced identically across Tasks 7-9. `useHost()` returns `{ store, transport }` consumed by the store's `_host()`.
 
-**Note on `$configure`/`_deps`:** the store exposes a test seam (`$configure`) so unit tests inject in-memory `store`/`transport` and a deterministic id generator; the app path lazily builds Cockpit-backed deps via `useHost()`.
+**Note on the Task 7 refactor:** Task 6 shipped `accounts.ts` with an `activeId`/`setActive`/`getActive` active concept. Task 7 removes that (tabs own active) and updates the Task 6 tests accordingly. This is safe because no already-built code consumes `accounts.activeId` — the only consumer (the store) is written fresh in Task 8 against the new registry-only shape.
