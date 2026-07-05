@@ -13,8 +13,13 @@ const selectedCat = ref<string | null>(null)
 const query = ref('')
 const results = ref<Channel[]>([])
 
+let syncSeq = 0
 async function syncAccount() {
+  const seq = ++syncSeq
+  query.value = ''
+  results.value = []
   await lib.setAccount(ws.activeAccount)
+  if (seq !== syncSeq) return // a newer account switch superseded this one
   selectedCat.value = lib.categories[0]?.id ?? null
   if (selectedCat.value) await lib.loadCategory(selectedCat.value)
 }
