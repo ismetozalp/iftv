@@ -3,16 +3,24 @@ import { ref, watch, onBeforeUnmount } from 'vue'
 import Hls from 'hls.js'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
+import { formatTime, clampFraction } from '@/core/media/seekbar'
 
 const player = usePlayerStore()
 const settings = useSettingsStore()
 const video = ref<HTMLVideoElement | null>(null)
+const track = ref<HTMLElement | null>(null)
 const buffering = ref(false)
+const now = ref(0)
+const bufferedEnd = ref(0)
+const paused = ref(false)
 let hls: Hls | null = null
 
 function teardown() {
   if (hls) { hls.destroy(); hls = null }
   buffering.value = false
+  now.value = 0
+  bufferedEnd.value = 0
+  paused.value = false
 }
 
 watch(
@@ -65,6 +73,26 @@ function close() {
   teardown()
   void player.stop()
 }
+
+function updatePlayhead() {
+  if (!video.value) return
+  now.value = player.startOffset + (video.value.currentTime || 0)
+  const buffered = video.value.buffered
+  bufferedEnd.value = player.startOffset + (buffered.length ? buffered.end(buffered.length - 1) : 0)
+}
+
+function togglePlay() {
+  if (!video.value) return
+  if (video.value.paused) void video.value.play().catch(() => {})
+  else video.value.pause()
+}
+
+function onScrub(e: MouseEvent) {
+  if (!track.value || player.duration == null) return
+  const r = track.value.getBoundingClientRect()
+  const frac = clampFraction((e.clientX - r.left) / r.width)
+  void player.seek(frac * player.duration)
+}
 </script>
 
 <template>
@@ -83,14 +111,27 @@ function close() {
       <video
         ref="video"
         class="iftv-player-video"
-        controls
+        :controls="player.duration == null"
         autoplay
         playsinline
         @waiting="buffering = true"
         @stalled="buffering = true"
         @playing="buffering = false"
         @canplay="buffering = false"
+        @timeupdate="updatePlayhead"
+        @progress="updatePlayhead"
+        @play="paused = false"
+        @pause="paused = true"
       ></video>
+    </div>
+    <div v-if="player.duration != null" class="iftv-seekbar">
+      <button class="btn btn-sm btn-light" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
+      <span class="iftv-seek-time">{{ formatTime(now) }}</span>
+      <div ref="track" class="iftv-seek-track" @click="onScrub">
+        <div class="iftv-seek-buffered" :style="{ width: clampFraction(bufferedEnd / player.duration) * 100 + '%' }"></div>
+        <div class="iftv-seek-played" :style="{ width: clampFraction(now / player.duration) * 100 + '%' }"></div>
+      </div>
+      <span class="iftv-seek-time">{{ formatTime(player.duration) }}</span>
     </div>
   </div>
 </template>

@@ -40,6 +40,13 @@ body { margin: 0; }
   background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 0.9rem; pointer-events: none;
 }
 
+.iftv-seekbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.8rem; background: rgba(0, 0, 0, 0.85); }
+.iftv-seek-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: #444; cursor: pointer; }
+.iftv-seek-buffered, .iftv-seek-played { position: absolute; left: 0; top: 0; height: 100%; border-radius: 3px; }
+.iftv-seek-buffered { background: #888; }
+.iftv-seek-played { background: #0d6efd; }
+.iftv-seek-time { color: #ddd; font-variant-numeric: tabular-nums; font-size: 0.8rem; min-width: 3.5rem; }
+
 .iftv-detail { position: fixed; inset: 0; z-index: 1040; background: rgba(0, 0, 0, 0.75); display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .iftv-detail-card { position: relative; background: #1a1a1a; color: #fff; border-radius: 8px; max-width: 800px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 1.25rem; }
 .iftv-detail-close { position: absolute; top: 0.75rem; right: 0.75rem; }
