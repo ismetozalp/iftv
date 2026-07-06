@@ -17,6 +17,9 @@ function deps(over: Partial<EngineDeps> = {}): EngineDeps {
     spawn: vi.fn(() => ({ close: vi.fn() })),
     readFile: vi.fn(async () => new TextEncoder().encode('#EXTM3U')), // playlist ready immediately
     wait: vi.fn(async () => {}),
+    cacheDir: async () => '',
+    cacheLimitBytes: async () => Number.MAX_SAFE_INTEGER,
+    listSessionDirs: async () => [],
     ...over,
   }
 }
@@ -163,5 +166,39 @@ describe('createPlaybackEngine.start', () => {
     expect(close).toHaveBeenCalledWith('terminated')
     expect(close).toHaveBeenCalledTimes(2) // curl + ffmpeg
     expect(d.rmrf).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid')
+  })
+
+  it('writes the playlist/segments under the configured cache root (resolveCacheRoot(home, cacheDir))', async () => {
+    const d = deps({ cacheDir: async () => '/data' })
+    const eng = createPlaybackEngine(d)
+    await eng.start(XT, item)
+    expect(d.mkdir).toHaveBeenCalledWith('/data/inflighttv/sid')
+    expect(d.mkfifo).toHaveBeenCalledWith('/data/inflighttv/sid/in.ts')
+    const ff = spawnArgs(d).find((a) => a[0] === 'ffmpeg')!
+    expect(ff[ff.length - 1]).toBe('/data/inflighttv/sid/index.m3u8')
+  })
+
+  it('prunes oldest over-limit leftover dirs at start, never the new session', async () => {
+    const GB = 1024 ** 3
+    const d = deps({
+      cacheDir: async () => '/data',
+      cacheLimitBytes: async () => 5 * GB,
+      listSessionDirs: async () => [
+        { id: 'sid', sizeBytes: 2 * GB, mtime: 9 }, // the new session — must never be pruned
+        { id: 'old1', sizeBytes: 2 * GB, mtime: 1 }, // oldest leftover
+        { id: 'old2', sizeBytes: 2 * GB, mtime: 2 },
+      ],
+    })
+    const eng = createPlaybackEngine(d)
+    await eng.start(XT, item)
+    expect(d.rmrf).toHaveBeenCalledWith('/data/inflighttv/old1')
+    expect(d.rmrf).not.toHaveBeenCalledWith('/data/inflighttv/sid')
+    expect(d.rmrf).not.toHaveBeenCalledWith('/data/inflighttv/old2')
+  })
+
+  it('pruning failure never blocks playback', async () => {
+    const d = deps({ listSessionDirs: async () => { throw new Error('boom') } })
+    const eng = createPlaybackEngine(d)
+    await expect(eng.start(XT, item)).resolves.toBeDefined()
   })
 })

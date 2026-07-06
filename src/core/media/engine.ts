@@ -3,8 +3,9 @@ import type { ContentItem } from '@/core/content/types'
 import type { EngineDeps, FfmpegProc, PlaybackEngine, PlaybackSession } from './PlaybackEngine'
 import { playbackUrl } from './streamUrl'
 import { buildCurlArgs, buildLiveRemuxArgs, buildLiveUrlRemuxArgs, buildVodRemuxArgs, isHlsUrl, STREAM_USER_AGENT } from './ffmpegArgs'
-import { cacheRoot, sessionDir, playlistPath, segmentPattern, sourceUrl, resolveInDir } from './session'
+import { resolveCacheRoot, sessionDir, playlistPath, segmentPattern, sourceUrl, resolveInDir } from './session'
 import { createCockpitLoaderClass } from './hlsLoader'
+import { selectDirsToPrune } from './cachePrune'
 
 const PLAYLIST_TRIES = 40
 const PLAYLIST_INTERVAL_MS = 500
@@ -15,9 +16,14 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       const inputUrl = playbackUrl(account, item)
       if (!inputUrl) throw new Error('This item is not playable')
 
+      const root = resolveCacheRoot(await deps.home(), await deps.cacheDir())
       const id = deps.newId()
-      const dir = sessionDir(cacheRoot(await deps.home()), id)
+      const dir = sessionDir(root, id)
       await deps.mkdir(dir)
+      try { // best-effort size cap: drop oldest leftover sessions (never the new one)
+        const victims = selectDirsToPrune(await deps.listSessionDirs(root), await deps.cacheLimitBytes(), id)
+        for (const vid of victims) await deps.rmrf(sessionDir(root, vid))
+      } catch { /* pruning must never block playback */ }
 
       // Live = rolling window (curl→FIFO, unchanged), sized to hold the buffer (>= bufferSeconds
       // of 4s segments). Movie/episode = finite VOD: ffmpeg reads the panel url directly with
