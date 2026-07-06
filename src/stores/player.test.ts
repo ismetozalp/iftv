@@ -27,7 +27,7 @@ describe('usePlayerStore', () => {
     const p = usePlayerStore()
     p.$configure({ engine })
     await p.play(ACCT, item)
-    expect(engine.start).toHaveBeenCalledWith(ACCT, item, { bufferSeconds: 30, startOffsetSeconds: 0, videoCodec: 'copy' })
+    expect(engine.start).toHaveBeenCalledWith(ACCT, item, { bufferSeconds: 30, startOffsetSeconds: 0, videoCodec: 'copy', audioIndex: 0, subtitleIndex: null })
     expect(p.status).toBe('playing')
     expect(p.item?.id).toBe('x:live:1')
     expect(p.session?.sourceUrl).toBe('iftv://s/index.m3u8')
@@ -295,5 +295,104 @@ describe('usePlayerStore', () => {
     ;(engine.start as ReturnType<typeof vi.fn>).mockClear()
     await p.fallbackToSoftware()
     expect(engine.start).not.toHaveBeenCalled()
+  })
+
+  it('play() discovers tracks (via injected probe) and defaults to audio 0 / no subtitle', async () => {
+    const { engine } = engineWith()
+    const probe = vi.fn(async () => ({
+      audio: [{ index: 0, language: 'tur', codec: 'aac' }],
+      subtitles: [{ index: 0, language: 'eng', codec: 'subrip', text: true }],
+    }))
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {}, probe })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await Promise.resolve() // let discovery settle
+    expect(p.selectedAudio).toBe(0)
+    expect(p.selectedSubtitle).toBeNull()
+    expect(p.audioTracks.length).toBe(1)
+    expect(p.subtitleTracks.length).toBe(1)
+    expect(probe).toHaveBeenCalledWith(ACCT, MOVIE)
+  })
+
+  it('setSubtitle restarts ONCE at the same offset with subtitleIndex, single-flight', async () => {
+    const starts: unknown[] = []
+    const engine: PlaybackEngine = {
+      start: vi.fn(async (_a, _i, o) => { starts.push(o); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, readSubtitle: async () => null, stop: async () => {} } }),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {}, probe: async () => ({ audio: [], subtitles: [{ index: 0, language: 'eng', codec: 'subrip', text: true }] }) })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.seek(600)
+    starts.length = 0
+    await p.setSubtitle(0)
+    expect(starts).toHaveLength(1)
+    expect(starts[0]).toMatchObject({ startOffsetSeconds: 600, subtitleIndex: 0 })
+    expect(p.selectedSubtitle).toBe(0)
+  })
+
+  it('a seek after picking audio/subtitle keeps the selection', async () => {
+    const starts: unknown[] = []
+    const engine: PlaybackEngine = {
+      start: vi.fn(async (_a, _i, o) => { starts.push(o); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, readSubtitle: async () => null, stop: async () => {} } }),
+    }
+    const p = usePlayerStore()
+    p.$configure({
+      engine,
+      sleep: async () => {},
+      probe: async () => ({
+        audio: [{ index: 0, language: '', codec: 'aac' }, { index: 1, language: '', codec: 'ac3' }],
+        subtitles: [{ index: 0, language: 'eng', codec: 'subrip', text: true }],
+      }),
+    })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.setAudioTrack(1)
+    await p.setSubtitle(0)
+    starts.length = 0
+    await p.seek(900)
+    expect(starts).toHaveLength(1)
+    expect(starts[0]).toMatchObject({ startOffsetSeconds: 900, audioIndex: 1, subtitleIndex: 0 })
+  })
+
+  it('rapid track changes never start two sessions (maxActive===1)', async () => {
+    let active = 0
+    let maxActive = 0
+    const engine: PlaybackEngine = {
+      start: vi.fn(async () => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => { active-- }, readSubtitle: async () => null }
+      }),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {} })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await Promise.all([p.setAudioTrack(1), p.setSubtitle(0), p.setAudioTrack(0)])
+    expect(maxActive).toBe(1) // never two live sessions
+    expect(active).toBe(1) // exactly one session left (no leak)
+  })
+
+  it('stop() and fail() reset track selections and discovered lists', async () => {
+    const { engine } = engineWith()
+    const p = usePlayerStore()
+    p.$configure({
+      engine,
+      sleep: async () => {},
+      probe: async () => ({ audio: [{ index: 0, language: '', codec: 'aac' }], subtitles: [{ index: 0, language: 'eng', codec: 'subrip', text: true }] }),
+    })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.setAudioTrack(0)
+    await Promise.resolve()
+    expect(p.audioTracks.length).toBe(1)
+    await p.stop()
+    expect(p.audioTracks).toEqual([])
+    expect(p.subtitleTracks).toEqual([])
+    expect(p.selectedAudio).toBe(0)
+    expect(p.selectedSubtitle).toBeNull()
+
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await Promise.resolve()
+    await p.fail('boom')
+    expect(p.audioTracks).toEqual([])
+    expect(p.subtitleTracks).toEqual([])
   })
 })

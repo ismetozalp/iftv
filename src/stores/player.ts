@@ -6,8 +6,15 @@ import type { PlaybackEngine, PlaybackSession } from '@/core/media/PlaybackEngin
 import { createCockpitPlaybackEngine } from '@/adapters/cockpitPlayback'
 import { useSettingsStore } from '@/stores/settings'
 import { resolveEncoder } from '@/core/media/encoder'
+import { parseTracks, type AudioTrack, type SubtitleTrack } from '@/core/media/tracks'
+import { probeStreams } from '@/adapters/cockpitProbe'
+import { playbackUrl } from '@/core/media/streamUrl'
 
-interface PlayerDeps { engine: PlaybackEngine; sleep?: (ms: number) => Promise<void> }
+interface PlayerDeps {
+  engine: PlaybackEngine
+  sleep?: (ms: number) => Promise<void>
+  probe?: (account: Account, item: ContentItem) => Promise<{ audio: AudioTrack[]; subtitles: SubtitleTrack[] }>
+}
 
 const SETTLE_MS = 700
 
@@ -23,6 +30,10 @@ export const usePlayerStore = defineStore('player', {
     transcode: false,
     currentCodec: 'copy' as 'copy' | 'nvenc' | 'x264', // codec the ACTIVE session is using
     _forceSoftware: false, // sticky once nvenc fails (start or mid-stream) → stay on x264 for this item
+    audioTracks: [] as AudioTrack[],
+    subtitleTracks: [] as SubtitleTrack[],
+    selectedAudio: 0,
+    selectedSubtitle: null as number | null,
     _deps: null as PlayerDeps | null,
     // Concurrency guard (non-reactive): `lock` serialises play/seek/stop/fail so their async
     // bodies never interleave, and `gen` supersedes an in-flight op when a newer one starts.
@@ -55,9 +66,14 @@ export const usePlayerStore = defineStore('player', {
       const settings = useSettingsStore()
       return resolveEncoder(settings.transcodeMode, settings.encoderTest)
     },
+    // Resolve the track-discovery dep (injected in tests) or the real ffprobe-backed default.
+    async _probe(account: Account, item: ContentItem): Promise<{ audio: AudioTrack[]; subtitles: SubtitleTrack[] }> {
+      if (this._deps?.probe) return this._deps.probe(account, item)
+      return parseTracks(await probeStreams(playbackUrl(account, item) ?? ''))
+    },
     // Start the session, and if an nvenc attempt throws, retry ONCE with x264 before surfacing
     // the error — a runtime GPU failure (driver/session-limit/etc.) shouldn't strand playback.
-    async _startWithFallback(account: Account, item: ContentItem, opts: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264' }): Promise<PlaybackSession> {
+    async _startWithFallback(account: Account, item: ContentItem, opts: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null }): Promise<PlaybackSession> {
       const engine = await this._engine()
       try {
         return await engine.start(account, item, opts)
@@ -83,13 +99,28 @@ export const usePlayerStore = defineStore('player', {
         this.transcode = false
         this._forceSoftware = false
         this.currentCodec = 'copy'
+        this.selectedAudio = 0
+        this.selectedSubtitle = null
+        this.audioTracks = []
+        this.subtitleTracks = []
         try {
           const bufferSeconds = useSettingsStore().bufferSeconds
-          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: 0, videoCodec: this._resolveVideoCodec() })
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: 0, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
           if (gen !== this._mx.gen) { await session.stop(); return } // superseded while starting
           this.session = session
           this.currentCodec = this._resolveVideoCodec()
           this.status = 'playing'
+          // Track discovery is non-blocking: playback already started on defaults (audio 0, no
+          // subtitle). Guard the result by `gen` so a stale probe from a superseded play() can
+          // never clobber the tracks of whatever is playing now.
+          void this._probe(account, item)
+            .then((t) => {
+              if (gen === this._mx.gen) {
+                this.audioTracks = t.audio
+                this.subtitleTracks = t.subtitles
+              }
+            })
+            .catch(() => {})
         } catch (e) {
           if (gen === this._mx.gen) {
             this.status = 'error'
@@ -118,7 +149,7 @@ export const usePlayerStore = defineStore('player', {
         await this.sleep(SETTLE_MS) // let the panel see the drop before reconnecting
         if (gen !== this._mx.gen) return // superseded during settle → the newer op will start
         try {
-          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec() })
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
           if (gen !== this._mx.gen) { await session.stop(); return }
           this.session = session
           this.startOffset = target
@@ -158,7 +189,7 @@ export const usePlayerStore = defineStore('player', {
         await this.sleep(SETTLE_MS) // let the panel see the drop before reconnecting
         if (gen !== this._mx.gen) return // superseded during settle → the newer op will start
         try {
-          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec() })
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
           if (gen !== this._mx.gen) { await session.stop(); return }
           this.session = session
           this.startOffset = target
@@ -193,7 +224,7 @@ export const usePlayerStore = defineStore('player', {
         await this.sleep(SETTLE_MS)
         if (gen !== this._mx.gen) return
         try {
-          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec() })
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
           if (gen !== this._mx.gen) { await session.stop(); return }
           this.session = session
           this.startOffset = target
@@ -207,6 +238,49 @@ export const usePlayerStore = defineStore('player', {
           }
         }
       })
+    },
+    // Restart the CURRENT item at the CURRENT offset with a new audio/subtitle selection
+    // (setAudioTrack/setSubtitle). Mirrors fallbackToSoftware's single-flight body exactly (same
+    // mutex+gen discipline) so it can never overlap a play/seek/stop/retry/fallback, and always
+    // leaves exactly one connection alive.
+    async _restartCurrent() {
+      if (!this.account || !this.item) return
+      const gen = ++this._mx.gen
+      await this._exclusive(async () => {
+        if (gen !== this._mx.gen) return
+        const account = this.account
+        const item = this.item
+        if (!account || !item) return
+        const bufferSeconds = useSettingsStore().bufferSeconds
+        const target = this.startOffset
+        const s = this.session
+        this.session = null
+        if (s) await s.stop()
+        await this.sleep(SETTLE_MS)
+        if (gen !== this._mx.gen) return
+        try {
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
+          if (gen !== this._mx.gen) { await session.stop(); return }
+          this.session = session
+          this.startOffset = target
+          this.currentCodec = this._resolveVideoCodec()
+          this.status = 'playing'
+        } catch (e) {
+          if (gen === this._mx.gen) {
+            this.status = 'error'
+            this.error = e instanceof Error ? e.message : String(e)
+            this.session = null
+          }
+        }
+      })
+    },
+    async setAudioTrack(i: number) {
+      this.selectedAudio = i
+      await this._restartCurrent()
+    },
+    async setSubtitle(i: number | null) {
+      this.selectedSubtitle = i
+      await this._restartCurrent()
     },
     async stop() {
       ++this._mx.gen // supersede any in-flight play/seek so it won't start a session
@@ -222,6 +296,10 @@ export const usePlayerStore = defineStore('player', {
         this.transcode = false
         this._forceSoftware = false
         this.currentCodec = 'copy'
+        this.audioTracks = []
+        this.subtitleTracks = []
+        this.selectedAudio = 0
+        this.selectedSubtitle = null
         if (s) await s.stop()
       })
     },
@@ -238,6 +316,10 @@ export const usePlayerStore = defineStore('player', {
         this.transcode = false
         this._forceSoftware = false
         this.currentCodec = 'copy'
+        this.audioTracks = []
+        this.subtitleTracks = []
+        this.selectedAudio = 0
+        this.selectedSubtitle = null
         if (s) await s.stop()
       })
     },
