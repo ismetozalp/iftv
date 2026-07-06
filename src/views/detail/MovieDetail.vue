@@ -1,14 +1,67 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useDetailStore } from '@/stores/detail'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { usePlayerStore } from '@/stores/player'
+import { useCollectionsStore } from '@/stores/collections'
 import { useProxiedImage } from '@/composables/useProxiedImage'
 
 const detail = useDetailStore()
 const ws = useWorkspaceStore()
 const player = usePlayerStore()
+const collections = useCollectionsStore()
 const { url: posterUrl, failed: posterFailed } = useProxiedImage(() => detail.movie?.poster)
+
+const isFav = computed(() => {
+  const account = ws.activeAccount
+  const item = detail.item
+  return !!account && !!item && collections.isFavorite(account.id, item.id)
+})
+const lists = computed(() => {
+  const account = ws.activeAccount
+  return account ? collections.listsOf(account.id) : []
+})
+
+function toggleFavorite() {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  void collections.toggleFavorite(account, item)
+}
+function addToWatchLater() {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  void collections.addWatchLater(account, item)
+}
+function addToExistingList(listId: string) {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  void collections.addToList(listId, account, item)
+  listMenuOpen.value = false
+}
+async function addToNewList() {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  const name = window.prompt('New list name')
+  if (!name || !name.trim()) return
+  await collections.createList(name.trim())
+  const created = collections.listsOf(account.id)[0]
+  if (created) await collections.addToList(created.id, account, item)
+  listMenuOpen.value = false
+}
+
+const listMenuOpen = ref(false)
+function toggleListMenu() {
+  listMenuOpen.value = !listMenuOpen.value
+}
+function onDocClick() {
+  listMenuOpen.value = false
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 const durationLabel = computed(() => {
   const secs = detail.movie?.durationSecs
@@ -53,7 +106,38 @@ function close() {
           <p v-if="detail.movie.plot">{{ detail.movie.plot }}</p>
           <p v-if="detail.movie.cast" class="small"><strong>Cast:</strong> {{ detail.movie.cast }}</p>
           <p v-if="detail.movie.director" class="small"><strong>Director:</strong> {{ detail.movie.director }}</p>
-          <button class="btn btn-primary mt-2" @click="play">▶ Play</button>
+          <div class="d-flex gap-2 mt-2 flex-wrap align-items-start">
+            <button class="btn btn-primary" @click="play">▶ Play</button>
+            <button
+              v-if="ws.activeAccount"
+              type="button"
+              class="btn btn-outline-light"
+              :class="{ active: isFav }"
+              @click="toggleFavorite"
+            >
+              <span v-if="isFav">★ Favorited</span>
+              <span v-else>☆ Favorite</span>
+            </button>
+            <button v-if="ws.activeAccount" type="button" class="btn btn-outline-light" @click="addToWatchLater">
+              ＋ Watch Later
+            </button>
+            <div v-if="ws.activeAccount" class="dropdown" @click.stop>
+              <button
+                type="button"
+                class="btn btn-outline-light dropdown-toggle"
+                aria-expanded="false"
+                @click.stop="toggleListMenu"
+              >
+                ＋ Add to list
+              </button>
+              <ul v-if="listMenuOpen" class="dropdown-menu show">
+                <li v-for="l in lists" :key="l.id">
+                  <button type="button" class="dropdown-item" @click="addToExistingList(l.id)">{{ l.name }}</button>
+                </li>
+                <li><button type="button" class="dropdown-item" @click="addToNewList">New list…</button></li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>

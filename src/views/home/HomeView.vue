@@ -3,9 +3,11 @@ import { ref, computed, watch } from 'vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { Section } from '@/core/content/provider'
 import BrowseView from '@/views/browse/BrowseView.vue'
+import LibraryView from '@/views/library/LibraryView.vue'
 
 const ws = useWorkspaceStore()
 const section = ref<Section>('live')
+const view = ref<'browse' | 'library'>('browse')
 
 // M3U accounts only have live; force back to live when the active account is m3u.
 const sections = computed<{ id: Section; label: string }[]>(() =>
@@ -15,7 +17,13 @@ const sections = computed<{ id: Section; label: string }[]>(() =>
 )
 watch(() => ws.activeAccount?.id, () => {
   if (!sections.value.some((s) => s.id === section.value)) section.value = 'live'
+  view.value = 'browse'
 })
+
+function selectSection(id: Section) {
+  view.value = 'browse'
+  section.value = id
+}
 </script>
 
 <template>
@@ -27,13 +35,22 @@ watch(() => ws.activeAccount?.id, () => {
           :key="s.id"
           type="button"
           class="btn"
-          :class="s.id === section ? 'btn-primary' : 'btn-outline-primary'"
-          @click="section = s.id"
+          :class="s.id === section && view === 'browse' ? 'btn-primary' : 'btn-outline-primary'"
+          @click="selectSection(s.id)"
         >
           {{ s.label }}
         </button>
+        <button
+          type="button"
+          class="btn"
+          :class="view === 'library' ? 'btn-primary' : 'btn-outline-primary'"
+          @click="view = 'library'"
+        >
+          ★ Library
+        </button>
       </nav>
-      <BrowseView :section="section" class="flex-fill" />
+      <BrowseView v-if="view === 'browse'" :section="section" class="flex-fill" />
+      <LibraryView v-else class="flex-fill" />
     </template>
     <div v-else>
       <h4>Welcome to InFlight TV</h4>
