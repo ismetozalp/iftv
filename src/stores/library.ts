@@ -72,6 +72,13 @@ export const useLibraryStore = defineStore('library', {
         this.loading = false
       }
     },
+    // Independent of setContext/categories state — used by the Guide view to get every live
+    // channel for `account` in one call (backs epg.guideChannels). Reuses the same provider
+    // factory as setContext but never touches this.categories/itemsByCat/_provider.
+    async allLiveItems(account: Account): Promise<ContentItem[]> {
+      const { makeProvider } = await this._factory()
+      return makeProvider(account, 'live').getAllItems()
+    },
     async search(query: string): Promise<ContentItem[]> {
       if (!this._provider) return []
       if (!this.all) {

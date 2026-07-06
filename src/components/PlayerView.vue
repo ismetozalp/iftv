@@ -4,16 +4,19 @@ import Hls from 'hls.js'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { useCollectionsStore } from '@/stores/collections'
+import { useEpgStore } from '@/stores/epg'
 import { formatTime, clampFraction } from '@/core/media/seekbar'
 
 const player = usePlayerStore()
 const settings = useSettingsStore()
 const collections = useCollectionsStore()
+const epg = useEpgStore()
 const video = ref<HTMLVideoElement | null>(null)
 const track = ref<HTMLElement | null>(null)
 const subTrack = ref<HTMLTrackElement | null>(null)
 const buffering = ref(false)
 const now = ref(0)
+const nowMs = ref(Date.now())
 const bufferedEnd = ref(0)
 const paused = ref(false)
 let hls: Hls | null = null
@@ -206,7 +209,20 @@ function updatePlayhead() {
   now.value = player.startOffset + (video.value.currentTime || 0)
   const buffered = video.value.buffered
   bufferedEnd.value = player.startOffset + (buffered.length ? buffered.end(buffered.length - 1) : 0)
+  nowMs.value = Date.now()
 }
+
+// Live now-playing strip: matched programme + progress, recomputed off nowMs (bumped each
+// timeupdate/progress tick above) so the bar advances roughly once per second while playing.
+const liveNowNext = computed(() => {
+  if (player.item?.kind !== 'live') return null
+  return epg.nowNextFor(player.item.name, nowMs.value)
+})
+const liveProgressPct = computed(() => {
+  const p = liveNowNext.value?.now
+  if (!p) return 0
+  return clampFraction((nowMs.value - p.startMs) / (p.stopMs - p.startMs)) * 100
+})
 
 function togglePlay() {
   if (!video.value) return
@@ -247,6 +263,12 @@ function onScrub(e: MouseEvent) {
         </option>
       </select>
       <button class="btn btn-sm btn-light" @click="close">✕ Close</button>
+    </div>
+    <div v-if="liveNowNext?.now" class="iftv-epg-strip">
+      <span class="iftv-epg-strip-title text-truncate">{{ liveNowNext.now.title }}</span>
+      <div class="iftv-epg-progress">
+        <div class="iftv-epg-progress-bar" :style="{ width: liveProgressPct + '%' }"></div>
+      </div>
     </div>
     <div class="iftv-player-body">
       <p v-if="player.status === 'starting'" class="text-light p-3">Starting stream…</p>
