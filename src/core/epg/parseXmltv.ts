@@ -5,8 +5,12 @@ import type { ParsedEpg, Programme, XmltvChannel } from './types'
 
 const CHANNEL_RE = /<channel\s[^>]*id="([^"]*)"[^>]*>([\s\S]*?)<\/channel>/g
 const DISPLAY_NAME_RE = /<display-name[^>]*>([\s\S]*?)<\/display-name>/g
-const PROGRAMME_RE =
-  /<programme\s[^>]*start="([^"]*)"[^>]*stop="([^"]*)"[^>]*channel="([^"]*)"[^>]*>([\s\S]*?)<\/programme>/g
+// Capture the attribute blob + body, then read start/stop/channel individually — XMLTV sources vary
+// in attribute ORDER (some emit channel="" first), so a fixed-order regex would silently match none.
+const PROGRAMME_RE = /<programme\s([^>]*)>([\s\S]*?)<\/programme>/g
+const ATTR_START = /\bstart="([^"]*)"/
+const ATTR_STOP = /\bstop="([^"]*)"/
+const ATTR_CHANNEL = /\bchannel="([^"]*)"/
 const TITLE_RE = /<title[^>]*>([\s\S]*?)<\/title>/
 const DESC_RE = /<desc[^>]*>([\s\S]*?)<\/desc>/
 
@@ -65,14 +69,19 @@ export function parseXmltv(xml: string): ParsedEpg {
   let pm: RegExpExecArray | null
   PROGRAMME_RE.lastIndex = 0
   while ((pm = PROGRAMME_RE.exec(xml))) {
-    const [, startRaw, stopRaw, channelId, body] = pm
-    const startMs = parseXmltvTime(startRaw)
-    const stopMs = parseXmltvTime(stopRaw)
+    const attrs = pm[1]
+    const body = pm[2]
+    const sM = ATTR_START.exec(attrs)
+    const eM = ATTR_STOP.exec(attrs)
+    const cM = ATTR_CHANNEL.exec(attrs)
+    if (!sM || !eM || !cM) continue // missing required attribute → skip, don't throw
+    const startMs = parseXmltvTime(sM[1])
+    const stopMs = parseXmltvTime(eM[1])
     if (startMs == null || stopMs == null) continue // skip malformed programme, don't throw
     const titleMatch = TITLE_RE.exec(body)
     const descMatch = DESC_RE.exec(body)
     programmes.push({
-      channelId: decodeEntities(channelId),
+      channelId: decodeEntities(cM[1]),
       startMs,
       stopMs,
       title: titleMatch ? decodeEntities(titleMatch[1]).trim() : '',

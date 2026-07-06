@@ -5,7 +5,7 @@ import { fetchEpgXml } from '@/adapters/cockpitEpg'
 import { useSettingsStore, EPG_TTL_MS } from '@/stores/settings'
 import type { ContentItem } from '@/core/content/types'
 import { parseXmltv } from '@/core/epg/parseXmltv'
-import { buildIndex, nowNext, programmesInWindow, daySchedule } from '@/core/epg/index'
+import { buildIndex, nowNext, programmesInWindow } from '@/core/epg/index'
 import { normalizeChannelName } from '@/core/epg/normalize'
 import type { EpgIndex, Programme, XmltvChannel } from '@/core/epg/types'
 
@@ -21,6 +21,7 @@ interface PersistedEpg {
 }
 
 const EMPTY_PERSISTED: PersistedEpg = { loadedAt: 0, channels: [], programmes: [] }
+const DAY_MS = 24 * 3600 * 1000
 
 export const useEpgStore = defineStore('epg', {
   state: () => ({
@@ -28,11 +29,16 @@ export const useEpgStore = defineStore('epg', {
     loadedAt: 0,
     loading: false,
     error: '',
+    nowMs: Date.now(), // ticked ~1/min from App.vue so now/next getters stay fresh between refreshes
     _deps: null as Deps | null,
   }),
   actions: {
     $configure(deps: Deps) {
       this._deps = deps
+    },
+    // Bump the reactive clock so card/schedule now/next re-evaluate as programmes roll over.
+    tick(now = Date.now()) {
+      this.nowMs = now
     },
     async _host(): Promise<Deps> {
       if (!this._deps) this._deps = { store: await createCockpitStore(), fetchXml: fetchEpgXml }
@@ -85,10 +91,12 @@ export const useEpgStore = defineStore('epg', {
       (state) =>
       (name: string, atMs = Date.now()) =>
         nowNext(state.index[normalizeChannelName(name)] ?? [], atMs),
+    // The rest of the schedule from now, bounded to the next 24h (the feed runs several days deep;
+    // an unbounded list would show days of programmes in the popover).
     scheduleFor:
       (state) =>
       (name: string, atMs = Date.now()) =>
-        daySchedule(state.index[normalizeChannelName(name)] ?? [], atMs),
+        programmesInWindow(state.index[normalizeChannelName(name)] ?? [], atMs, atMs + DAY_MS),
     hasEpgFor: (state) => (name: string) => (state.index[normalizeChannelName(name)] ?? []).length > 0,
     guideChannels:
       (state) =>

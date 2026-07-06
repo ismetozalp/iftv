@@ -115,11 +115,16 @@ onMounted(() => {
 })
 onBeforeUnmount(() => ro?.disconnect())
 
-watch(rows, () => {
-  scrollTop.value = 0
-  if (gridEl.value) gridEl.value.scrollTop = 0
-  if (namesEl.value) namesEl.value.scrollTop = 0
-})
+// Reset scroll only when the CHANNEL SET changes (e.g. account switch) — NOT on every time-window
+// pan (rows is a fresh array each pan, so watching `rows` directly would snap scroll to top).
+watch(
+  () => rows.value.map((r) => r.item.id).join(','),
+  () => {
+    scrollTop.value = 0
+    if (gridEl.value) gridEl.value.scrollTop = 0
+    if (namesEl.value) namesEl.value.scrollTop = 0
+  },
+)
 
 const firstRow = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_H) - 2))
 const rowsInView = computed(() => Math.ceil(viewportH.value / ROW_H) + 4)

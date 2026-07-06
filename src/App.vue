@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { RouterView } from 'vue-router'
 import AccountTabBar from '@/components/AccountTabBar.vue'
 import PlayerView from '@/components/PlayerView.vue'
@@ -22,6 +22,9 @@ onMounted(() => {
   void collections.load()
   void epg.load().then(() => epg.ensureFresh())
 })
+// One shared clock (not one per card) so EPG now/next lines roll over without a full refresh.
+const epgClock = setInterval(() => epg.tick(), 60000)
+onBeforeUnmount(() => clearInterval(epgClock))
 </script>
 
 <template>

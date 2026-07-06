@@ -28,4 +28,11 @@ describe('parseXmltv', () => {
     expect(p.programmes.length).toBe(1)
     expect(p.programmes[0].title).toBe('Good')
   })
+
+  it('parses programme attributes regardless of order (channel-first source)', () => {
+    const xml = `<tv><programme channel="c1" stop="20260706130000 +0300" start="20260706120000 +0300"><title>Ordered</title></programme></tv>`
+    const p = parseXmltv(xml)
+    expect(p.programmes.length).toBe(1)
+    expect(p.programmes[0]).toMatchObject({ channelId: 'c1', title: 'Ordered', startMs: Date.UTC(2026, 6, 6, 9, 0, 0) })
+  })
 })
