@@ -77,7 +77,7 @@ describe('useDetailStore', () => {
       cast: 'A, B',
       genre: 'Drama',
       seasons: [1],
-      episodes: [{ episodeId: '11', title: 'S1E1', season: 1, episodeNum: 1, containerExtension: 'mp4' }],
+      episodes: [{ episodeId: '11', title: 'S1E1', season: 1, episodeNum: 1, containerExtension: 'mp4', durationSecs: null }],
     })
   })
 

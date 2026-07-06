@@ -19,7 +19,7 @@ describe('getSeriesInfo', () => {
       seasons: [{ season_number: 1 }, { season_number: 2 }],
       episodes: {
         '2': [
-          { id: 21, episode_num: 1, title: 'S2E1', container_extension: 'mkv', season: 2 },
+          { id: 21, episode_num: 1, title: 'S2E1', container_extension: 'mkv', season: 2, info: { duration_secs: 2700 } },
           { id: 22, episode_num: 2, title: 'S2E2', container_extension: 'mkv', season: 2 },
         ],
         '1': [
@@ -37,10 +37,10 @@ describe('getSeriesInfo', () => {
       genre: 'Drama',
       seasons: [1, 2],
       episodes: [
-        { episodeId: '11', title: 'S1E1', season: 1, episodeNum: 1, containerExtension: 'mp4' },
-        { episodeId: '12', title: 'S1E2', season: 1, episodeNum: 2, containerExtension: 'mp4' },
-        { episodeId: '21', title: 'S2E1', season: 2, episodeNum: 1, containerExtension: 'mkv' },
-        { episodeId: '22', title: 'S2E2', season: 2, episodeNum: 2, containerExtension: 'mkv' },
+        { episodeId: '11', title: 'S1E1', season: 1, episodeNum: 1, containerExtension: 'mp4', durationSecs: null },
+        { episodeId: '12', title: 'S1E2', season: 1, episodeNum: 2, containerExtension: 'mp4', durationSecs: null },
+        { episodeId: '21', title: 'S2E1', season: 2, episodeNum: 1, containerExtension: 'mkv', durationSecs: 2700 },
+        { episodeId: '22', title: 'S2E2', season: 2, episodeNum: 2, containerExtension: 'mkv', durationSecs: null },
       ],
     })
 
@@ -85,7 +85,7 @@ describe('getSeriesInfo', () => {
     const out = await getSeriesInfo(t, 'http://h', 'u', 'p', '1')
     expect(out.seasons).toEqual([3])
     expect(out.episodes).toEqual([
-      { episodeId: '31', title: 'S3E1', season: 3, episodeNum: 1, containerExtension: 'mp4' },
+      { episodeId: '31', title: 'S3E1', season: 3, episodeNum: 1, containerExtension: 'mp4', durationSecs: null },
     ])
   })
 

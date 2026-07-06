@@ -8,6 +8,7 @@ export interface Episode {
   season: number
   episodeNum: number
   containerExtension: string
+  durationSecs: number | null
 }
 
 export interface SeriesDetailData {
@@ -39,12 +40,14 @@ export async function getSeriesInfo(
     if (!Array.isArray(seasonList)) continue
     for (const raw of seasonList) {
       const e = asRecord(raw)
+      const einfo = asRecord(e.info)
       episodes.push({
         episodeId: toStr(e.id),
         title: toStr(e.title),
         season: toNum(e.season) ?? toNum(seasonKey) ?? 0,
         episodeNum: toNum(e.episode_num) ?? 0,
         containerExtension: toStr(e.container_extension),
+        durationSecs: toNum(einfo.duration_secs),
       })
     }
   }

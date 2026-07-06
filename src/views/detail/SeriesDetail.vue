@@ -45,7 +45,7 @@ function playEpisode(episode: Episode) {
     containerExtension: episode.containerExtension,
     url: null,
   }
-  player.play(account, episodeItem)
+  player.play(account, episodeItem, { durationSeconds: episode.durationSecs ?? null })
   detail.close()
 }
 

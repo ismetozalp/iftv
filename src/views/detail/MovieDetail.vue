@@ -25,7 +25,7 @@ function play() {
   const movie = detail.movie
   if (!account || !item) return
   const playItem = movie ? { ...item, containerExtension: movie.containerExtension || item.containerExtension } : item
-  player.play(account, playItem)
+  player.play(account, playItem, { durationSeconds: movie?.durationSecs || null })
   detail.close()
 }
 
