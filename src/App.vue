@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { RouterView } from 'vue-router'
 import AccountTabBar from '@/components/AccountTabBar.vue'
 import PlayerView from '@/components/PlayerView.vue'
 import MovieDetail from '@/views/detail/MovieDetail.vue'
 import SeriesDetail from '@/views/detail/SeriesDetail.vue'
+import SettingsView from '@/views/settings/SettingsView.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useSettingsStore } from '@/stores/settings'
 
 const ws = useWorkspaceStore()
-onMounted(() => ws.init())
+const settings = useSettingsStore()
+const settingsOpen = ref(false)
+onMounted(() => {
+  void ws.init()
+  void settings.load()
+})
 </script>
 
 <template>
@@ -16,6 +23,7 @@ onMounted(() => ws.init())
     <header class="iftv-header d-flex align-items-center gap-3">
       <strong>InFlight TV</strong>
       <AccountTabBar />
+      <button class="btn btn-sm btn-link ms-auto" title="Settings" @click="settingsOpen = true">⚙ Settings</button>
     </header>
     <main class="iftv-main">
       <RouterView />
@@ -23,5 +31,6 @@ onMounted(() => ws.init())
     <MovieDetail />
     <SeriesDetail />
     <PlayerView />
+    <SettingsView :open="settingsOpen" @close="settingsOpen = false" />
   </div>
 </template>
