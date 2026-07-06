@@ -19,11 +19,6 @@ body { margin: 0; }
 .iftv-vgrid { height: 100%; overflow-y: auto; position: relative; }
 .iftv-vgrid-inner { position: relative; width: 100%; }
 .iftv-vgrid-cell { position: absolute; top: 0; left: 0; }
-.iftv-channel { align-items: center; justify-content: center; padding: 0.5rem; cursor: pointer; overflow: hidden; }
-.iftv-channel-logo { height: 72px; display: flex; align-items: center; justify-content: center; }
-.iftv-channel-logo img { max-height: 72px; max-width: 100%; object-fit: contain; }
-.iftv-channel-fallback { font-size: 1.5rem; font-weight: 600; color: var(--bs-secondary); }
-.iftv-channel-name { width: 100%; text-align: center; font-size: 0.85rem; margin-top: 0.25rem; }
 
 .iftv-card { align-items: center; justify-content: center; padding: 0.4rem; cursor: pointer; overflow: hidden; }
 .iftv-card-img { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; }

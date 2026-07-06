@@ -10,7 +10,6 @@ export const useLibraryStore = defineStore('library', {
   state: () => ({
     accountId: null as string | null,
     section: 'live' as Section,
-    _account: null as Account | null,
     categories: [] as Category[],
     itemsByCat: {} as Record<string, ContentItem[]>,
     all: null as ContentItem[] | null,
@@ -43,7 +42,6 @@ export const useLibraryStore = defineStore('library', {
       if (account?.id === this.accountId && section === this.section) return
       this.accountId = account?.id ?? null
       this.section = section
-      this._account = account
       this._reset()
       if (!account) return
       const { makeProvider } = await this._factory()
