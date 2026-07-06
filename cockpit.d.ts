@@ -24,10 +24,12 @@ declare module 'cockpit' {
     id: number; gid: number; name: string; full_name: string
     home: string; shell: string; groups: string[]
   }
-  interface CockpitSpawnOptions { superuser?: 'require' | 'try'; err?: 'message' | 'out' }
+  interface CockpitSpawnOptions { superuser?: 'require' | 'try'; err?: 'message' | 'out'; binary?: boolean }
+  interface CockpitSpawnBinaryOptions extends CockpitSpawnOptions { binary: true }
   interface Cockpit {
     http(endpoint: string | number | CockpitHttpOptions): CockpitHttpClient
     file<T = string>(path: string, options?: { syntax?: { parse(s: string): T; stringify(o: T): string }; binary?: boolean; superuser?: 'require' | 'try' }): CockpitFileHandle<T>
+    spawn(argv: string[], options: CockpitSpawnBinaryOptions): Promise<Uint8Array> & { stream(cb: (data: Uint8Array) => void): unknown }
     spawn(argv: string[], options?: CockpitSpawnOptions): Promise<string> & { stream(cb: (data: string) => void): unknown }
     user(): Promise<CockpitUser>
     location: { go(path: string): void; path: string[] }

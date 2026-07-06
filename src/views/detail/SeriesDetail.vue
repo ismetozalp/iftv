@@ -5,10 +5,12 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { usePlayerStore } from '@/stores/player'
 import type { ContentItem } from '@/core/content/types'
 import type { Episode } from '@/core/xtream/seriesInfo'
+import { useProxiedImage } from '@/composables/useProxiedImage'
 
 const detail = useDetailStore()
 const ws = useWorkspaceStore()
 const player = usePlayerStore()
+const { url: coverUrl, failed: coverFailed } = useProxiedImage(() => detail.series?.cover)
 
 const selectedSeason = ref<number | null>(null)
 watch(
@@ -58,7 +60,7 @@ function close() {
       <button class="btn btn-sm btn-light iftv-detail-close" @click="close">✕ Close</button>
       <div class="iftv-detail-body d-flex gap-3">
         <div class="iftv-detail-poster">
-          <img v-if="detail.series.cover" :src="detail.series.cover" alt="" />
+          <img v-if="coverUrl && !coverFailed" :src="coverUrl" alt="" @error="coverFailed = true" />
           <span v-else class="iftv-detail-poster-fallback">{{ detail.series.name.slice(0, 2).toUpperCase() }}</span>
         </div>
         <div class="iftv-detail-info flex-fill">

@@ -3,10 +3,12 @@ import { computed } from 'vue'
 import { useDetailStore } from '@/stores/detail'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { usePlayerStore } from '@/stores/player'
+import { useProxiedImage } from '@/composables/useProxiedImage'
 
 const detail = useDetailStore()
 const ws = useWorkspaceStore()
 const player = usePlayerStore()
+const { url: posterUrl, failed: posterFailed } = useProxiedImage(() => detail.movie?.poster)
 
 const durationLabel = computed(() => {
   const secs = detail.movie?.durationSecs
@@ -38,7 +40,7 @@ function close() {
       <button class="btn btn-sm btn-light iftv-detail-close" @click="close">✕ Close</button>
       <div class="iftv-detail-body d-flex gap-3">
         <div class="iftv-detail-poster">
-          <img v-if="detail.movie.poster" :src="detail.movie.poster" alt="" />
+          <img v-if="posterUrl && !posterFailed" :src="posterUrl" alt="" @error="posterFailed = true" />
           <span v-else class="iftv-detail-poster-fallback">{{ detail.movie.name.slice(0, 2).toUpperCase() }}</span>
         </div>
         <div class="iftv-detail-info flex-fill">
