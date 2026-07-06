@@ -137,7 +137,7 @@ function close() {
           <button class="btn btn-sm btn-outline-secondary" @click="onSaveCacheDir">Save</button>
         </div>
         <small class="text-muted">
-          Writes to <code>{{ (cacheDirInput || defaultRoot) }}/inflighttv</code>
+          Writes to <code>{{ cacheDirInput.trim() ? cacheDirInput.trim().replace(/\/+$/, '') + '/inflighttv' : defaultRoot }}</code>
         </small>
         <div class="text-danger small" v-if="cacheError">{{ cacheError }}</div>
         <label for="iftv-cache-limit" class="form-label mt-3">Max cache size (GB)</label>
