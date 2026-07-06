@@ -3,7 +3,7 @@ export interface Category {
   name: string
 }
 
-export type ContentKind = 'live' | 'movie' | 'series'
+export type ContentKind = 'live' | 'movie' | 'series' | 'episode'
 
 export interface ContentItem {
   id: string

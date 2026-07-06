@@ -1,7 +1,7 @@
 import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
 import type { EngineDeps, PlaybackEngine, PlaybackSession } from './PlaybackEngine'
-import { liveStreamUrl } from './streamUrl'
+import { playbackUrl } from './streamUrl'
 import { buildCurlArgs, buildRemuxArgs, STREAM_USER_AGENT } from './ffmpegArgs'
 import { cacheRoot, sessionDir, playlistPath, segmentPattern, sourceUrl, resolveInDir } from './session'
 import { createCockpitLoaderClass } from './hlsLoader'
@@ -12,7 +12,7 @@ const PLAYLIST_INTERVAL_MS = 500
 export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
   return {
     async start(account: Account, item: ContentItem): Promise<PlaybackSession> {
-      const inputUrl = liveStreamUrl(account, item)
+      const inputUrl = playbackUrl(account, item)
       if (!inputUrl) throw new Error('This item is not playable')
 
       const id = deps.newId()

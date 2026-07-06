@@ -13,7 +13,7 @@ const ws = useWorkspaceStore()
 const lib = useLibraryStore()
 const player = usePlayerStore()
 function onPlay(item: ContentItem) {
-  if (item.kind === 'live' && ws.activeAccount) player.play(ws.activeAccount, item)
+  if ((item.kind === 'live' || item.kind === 'movie') && ws.activeAccount) player.play(ws.activeAccount, item)
 }
 
 const selectedCat = ref<string | null>(null)
