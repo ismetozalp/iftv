@@ -22,6 +22,7 @@ export interface ProgressEntry {
 }
 
 export interface HistoryEntry {
+  durationSeconds: number | null
   item: ContentItem
   accountId: string
   watchedAt: number

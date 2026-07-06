@@ -25,13 +25,15 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'history', label: 'History' },
 ]
 
-function onPlay(item: ContentItem) {
+function onPlay(item: ContentItem, durationSeconds: number | null = null) {
   const account = ws.activeAccount
   if (!account) return
   if (item.kind === 'live') player.play(account, item)
   else if (item.kind === 'movie') detail.openMovie(account, item)
   else if (item.kind === 'series') detail.openSeries(account, item)
-  else if (item.kind === 'episode') player.play(account, item)
+  // Episodes have no detail route to re-fetch duration; pass the runtime captured at play time
+  // (from a History entry) so the replay keeps its seekbar + progress tracking.
+  else if (item.kind === 'episode') player.play(account, item, { durationSeconds: durationSeconds ?? undefined })
 }
 
 // --- Favorites ---
@@ -281,7 +283,7 @@ async function onClearHistory() {
           :key="h.accountId + ':' + h.item.id + ':' + i"
           class="list-group-item d-flex justify-content-between align-items-center"
           role="button"
-          @click="onPlay(h.item)"
+          @click="onPlay(h.item, h.durationSeconds)"
         >
           <span class="text-truncate">{{ h.item.name }}</span>
           <span class="text-muted small ms-2 flex-shrink-0">{{ relativeTime(h.watchedAt) }}</span>

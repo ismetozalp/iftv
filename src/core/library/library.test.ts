@@ -168,6 +168,17 @@ describe('history', () => {
     expect(d.history[0].watchedAt).toBe(2)
   })
 
+  it('recordHistory stores durationSeconds (so an episode can be replayed with a seekbar)', () => {
+    let d = recordHistory(emptyLibrary(), A, movie, 1, 5400)
+    expect(d.history[0].durationSeconds).toBe(5400)
+    // a later consecutive play refreshes both timestamp and duration
+    d = recordHistory(d, A, movie, 2, 5401)
+    expect(d.history.length).toBe(1)
+    expect(d.history[0]).toMatchObject({ watchedAt: 2, durationSeconds: 5401 })
+    // duration is optional (default null) for items recorded without a known runtime
+    expect(recordHistory(emptyLibrary(), A, series, 1).history[0].durationSeconds).toBeNull()
+  })
+
   it('records a new entry when the most recent item differs', () => {
     let d = recordHistory(emptyLibrary(), A, movie, 1)
     d = recordHistory(d, A, series, 2)

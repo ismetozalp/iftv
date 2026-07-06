@@ -187,7 +187,9 @@ watch(
   (status) => {
     if (status === 'playing' && !recordedHistory && player.item && player.account) {
       recordedHistory = true
-      void collections.recordHistory(player.account, player.item)
+      // pass the current runtime so an episode replayed from History keeps its seekbar + progress
+      // tracking (movies re-fetch duration via their detail view; episodes have no such route)
+      void collections.recordHistory(player.account, player.item, player.duration)
     }
   },
 )
