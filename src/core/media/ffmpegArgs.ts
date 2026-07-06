@@ -86,7 +86,9 @@ export function buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath, segm
     '-y',
     '-user_agent', STREAM_USER_AGENT,
     '-http_persistent', '0',
-    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_at_eof', '1', '-reconnect_delay_max', '5',
+    // NOTE: no -reconnect_at_eof — it breaks HLS codec probing on some FAST channels
+    // ("could not find codec parameters"); the HLS demuxer reloads the live playlist itself.
+    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
     '-i', inputUrl,
     ...videoCodecArgs(videoCodec),
     '-c:a', 'aac', '-b:a', '128k',
