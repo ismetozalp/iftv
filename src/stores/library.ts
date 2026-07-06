@@ -1,14 +1,16 @@
 import { defineStore } from 'pinia'
 import type { Account } from '@/core/accounts/accounts'
 import type { Category, ContentItem } from '@/core/content/types'
-import { createProvider, type ContentProvider } from '@/core/content/provider'
+import { createProvider, type ContentProvider, type Section } from '@/core/content/provider'
 import { useHost } from '@/composables/useHost'
 
-interface LibDeps { makeProvider: (account: Account) => ContentProvider }
+interface LibDeps { makeProvider: (account: Account, section: Section) => ContentProvider }
 
 export const useLibraryStore = defineStore('library', {
   state: () => ({
     accountId: null as string | null,
+    section: 'live' as Section,
+    _account: null as Account | null,
     categories: [] as Category[],
     itemsByCat: {} as Record<string, ContentItem[]>,
     all: null as ContentItem[] | null,
@@ -27,7 +29,7 @@ export const useLibraryStore = defineStore('library', {
     async _factory(): Promise<LibDeps> {
       if (this._deps) return this._deps
       const { transport } = await useHost()
-      this._deps = { makeProvider: (account) => createProvider(transport, account) }
+      this._deps = { makeProvider: (account, section) => createProvider(transport, account, section) }
       return this._deps
     },
     _reset() {
@@ -37,13 +39,15 @@ export const useLibraryStore = defineStore('library', {
       this.error = ''
       this._provider = null
     },
-    async setAccount(account: Account | null) {
-      if (account?.id === this.accountId) return
+    async setContext(account: Account | null, section: Section) {
+      if (account?.id === this.accountId && section === this.section) return
       this.accountId = account?.id ?? null
+      this.section = section
+      this._account = account
       this._reset()
       if (!account) return
       const { makeProvider } = await this._factory()
-      this._provider = makeProvider(account)
+      this._provider = makeProvider(account, section)
       await this.loadCategories()
     },
     async loadCategories() {

@@ -22,10 +22,10 @@ function fakeProvider(): ContentProvider {
 describe('useLibraryStore', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('setAccount loads categories', async () => {
+  it('setContext loads categories', async () => {
     const s = useLibraryStore()
-    s.$configure({ makeProvider: () => fakeProvider() })
-    await s.setAccount(ACCT)
+    s.$configure({ makeProvider: (_account, _section) => fakeProvider() })
+    await s.setContext(ACCT, 'live')
     expect(s.accountId).toBe('a')
     expect(s.categories.map((c) => c.name)).toEqual(['News', 'Sports'])
   })
@@ -33,8 +33,8 @@ describe('useLibraryStore', () => {
   it('loadCategory caches channels and itemsFor reads them', async () => {
     const p = fakeProvider()
     const s = useLibraryStore()
-    s.$configure({ makeProvider: () => p })
-    await s.setAccount(ACCT)
+    s.$configure({ makeProvider: (_account, _section) => p })
+    await s.setContext(ACCT, 'live')
     await s.loadCategory('1')
     expect(s.itemsFor('1').map((c) => c.name)).toEqual(['CNN', 'BBC News'])
     await s.loadCategory('1') // cached: no second call
@@ -43,27 +43,39 @@ describe('useLibraryStore', () => {
 
   it('search filters all channels case-insensitively by name', async () => {
     const s = useLibraryStore()
-    s.$configure({ makeProvider: () => fakeProvider() })
-    await s.setAccount(ACCT)
+    s.$configure({ makeProvider: (_account, _section) => fakeProvider() })
+    await s.setContext(ACCT, 'live')
     expect((await s.search('news')).map((c) => c.name)).toEqual(['BBC News'])
     expect(await s.search('')).toEqual([])
   })
 
   it('switching account resets categories and cache', async () => {
     const s = useLibraryStore()
-    s.$configure({ makeProvider: () => fakeProvider() })
-    await s.setAccount(ACCT)
+    s.$configure({ makeProvider: (_account, _section) => fakeProvider() })
+    await s.setContext(ACCT, 'live')
     await s.loadCategory('1')
-    await s.setAccount({ ...ACCT, id: 'b' })
+    await s.setContext({ ...ACCT, id: 'b' }, 'live')
     expect(s.accountId).toBe('b')
     expect(s.itemsFor('1')).toEqual([])
   })
 
-  it('setAccount(null) clears everything', async () => {
+  it('switching section resets and rebuilds', async () => {
     const s = useLibraryStore()
-    s.$configure({ makeProvider: () => fakeProvider() })
-    await s.setAccount(ACCT)
-    await s.setAccount(null)
+    let built = 0
+    s.$configure({ makeProvider: () => { built++; return fakeProvider() } })
+    await s.setContext(ACCT, 'live')
+    await s.loadCategory('1')
+    await s.setContext(ACCT, 'vod')
+    expect(s.section).toBe('vod')
+    expect(s.itemsFor('1')).toEqual([])
+    expect(built).toBe(2)
+  })
+
+  it('setContext(null) clears everything', async () => {
+    const s = useLibraryStore()
+    s.$configure({ makeProvider: (_account, _section) => fakeProvider() })
+    await s.setContext(ACCT, 'live')
+    await s.setContext(null, 'live')
     expect(s.accountId).toBeNull()
     expect(s.categories).toEqual([])
   })
@@ -71,7 +83,7 @@ describe('useLibraryStore', () => {
   it('records an error when the provider throws', async () => {
     const s = useLibraryStore()
     s.$configure({ makeProvider: () => ({ getCategories: async () => { throw new Error('boom') }, getItems: async () => [], getAllItems: async () => [] }) })
-    await s.setAccount(ACCT)
+    await s.setContext(ACCT, 'live')
     expect(s.error).toMatch(/boom/)
   })
 })

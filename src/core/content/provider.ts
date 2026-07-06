@@ -2,7 +2,11 @@ import type { Category, ContentItem } from './types'
 import type { XtreamTransport } from '@/core/xtream/transport'
 import type { Account } from '@/core/accounts/accounts'
 import { getLiveCategories, getLiveStreams } from '@/core/xtream/live'
+import { getVodCategories, getVodStreams } from '@/core/xtream/vod'
+import { getSeriesCategories, getSeries } from '@/core/xtream/series'
 import { parseM3u } from './m3u'
+
+export type Section = 'live' | 'vod' | 'series'
 
 export interface ContentProvider {
   getCategories(): Promise<Category[]>
@@ -10,14 +14,24 @@ export interface ContentProvider {
   getAllItems(): Promise<ContentItem[]>
 }
 
-export function createXtreamLiveProvider(t: XtreamTransport, account: Account): ContentProvider {
+type Cats = (t: XtreamTransport, url: string, u: string, p: string) => Promise<Category[]>
+type Items = (t: XtreamTransport, url: string, u: string, p: string, categoryId?: string) => Promise<ContentItem[]>
+
+function xtreamSection(section: Section): { cats: Cats; items: Items } {
+  if (section === 'vod') return { cats: getVodCategories, items: getVodStreams }
+  if (section === 'series') return { cats: getSeriesCategories, items: getSeries }
+  return { cats: getLiveCategories, items: getLiveStreams }
+}
+
+export function createXtreamProvider(t: XtreamTransport, account: Account, section: Section): ContentProvider {
   const { url, username, password } = account
+  const { cats, items } = xtreamSection(section)
   let allCache: ContentItem[] | null = null
   return {
-    getCategories: () => getLiveCategories(t, url, username, password),
-    getItems: (categoryId) => getLiveStreams(t, url, username, password, categoryId),
+    getCategories: () => cats(t, url, username, password),
+    getItems: (categoryId) => items(t, url, username, password, categoryId),
     async getAllItems() {
-      if (!allCache) allCache = await getLiveStreams(t, url, username, password)
+      if (!allCache) allCache = await items(t, url, username, password)
       return allCache
     },
   }
@@ -42,6 +56,13 @@ export function createM3uProvider(t: XtreamTransport, account: Account): Content
   }
 }
 
-export function createProvider(t: XtreamTransport, account: Account): ContentProvider {
-  return account.type === 'm3u' ? createM3uProvider(t, account) : createXtreamLiveProvider(t, account)
+const EMPTY_PROVIDER: ContentProvider = {
+  getCategories: async () => [],
+  getItems: async () => [],
+  getAllItems: async () => [],
+}
+
+export function createProvider(t: XtreamTransport, account: Account, section: Section): ContentProvider {
+  if (account.type === 'm3u') return section === 'live' ? createM3uProvider(t, account) : EMPTY_PROVIDER
+  return createXtreamProvider(t, account, section)
 }

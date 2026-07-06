@@ -18,7 +18,7 @@ async function syncAccount() {
   const seq = ++syncSeq
   query.value = ''
   results.value = []
-  await lib.setAccount(ws.activeAccount)
+  await lib.setContext(ws.activeAccount, 'live')
   if (seq !== syncSeq) return // a newer account switch superseded this one
   selectedCat.value = lib.categories[0]?.id ?? null
   if (selectedCat.value) await lib.loadCategory(selectedCat.value)
