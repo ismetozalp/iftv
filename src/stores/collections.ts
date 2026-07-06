@@ -87,8 +87,8 @@ export const useCollectionsStore = defineStore('collections', {
       this.data = libRemoveProgress(this.data, accountId, itemId)
       await this._persist()
     },
-    async recordHistory(account: Account, item: ContentItem) {
-      this.data = libRecordHistory(this.data, account, item, Date.now())
+    async recordHistory(account: Account, item: ContentItem, durationSeconds: number | null = null) {
+      this.data = libRecordHistory(this.data, account, item, Date.now(), durationSeconds)
       await this._persist()
     },
     async clearHistory() {

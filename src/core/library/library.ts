@@ -110,12 +110,12 @@ export function upsertProgress(
 
 // --- History ---
 
-export function recordHistory(d: LibraryData, account: Account, item: ContentItem, now: number): LibraryData {
+export function recordHistory(d: LibraryData, account: Account, item: ContentItem, now: number, durationSeconds: number | null = null): LibraryData {
   const [first, ...rest] = d.history
   if (first && isMatch(first, account.id, item.id)) {
-    return { ...d, history: [{ ...first, watchedAt: now }, ...rest] }
+    return { ...d, history: [{ ...first, watchedAt: now, durationSeconds }, ...rest] }
   }
-  const entry: HistoryEntry = { item, accountId: account.id, watchedAt: now }
+  const entry: HistoryEntry = { item, accountId: account.id, watchedAt: now, durationSeconds }
   return { ...d, history: [entry, ...d.history].slice(0, HISTORY_CAP) }
 }
 
