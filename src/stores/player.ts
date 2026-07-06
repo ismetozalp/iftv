@@ -105,28 +105,26 @@ export const usePlayerStore = defineStore('player', {
         this.subtitleTracks = []
         try {
           const bufferSeconds = useSettingsStore().bufferSeconds
+          // Track discovery runs ffprobe = a SECOND connection to the source. To honour the panel's
+          // 1-connection limit (exceeding it stalls the feed / risks a ban), NEVER hold two at once:
+          //  • LIVE: skip discovery entirely — a concurrent ffprobe races the curl→FIFO feed and the
+          //    panel cuts curl (playback stalls after the initial burst ~20s). Live rarely has tracks.
+          //  • VOD: probe BEFORE opening the playback connection (sequential), so the probe connection
+          //    has closed by the time ffmpeg connects. Costs a moment before start; keeps 1 connection.
+          // Best-effort: playback proceeds on defaults if discovery fails; the gen guard drops a probe
+          // superseded by a newer play().
+          if (item.kind !== 'live') {
+            try {
+              const t = await this._probe(account, item)
+              if (gen === this._mx.gen) { this.audioTracks = t.audio; this.subtitleTracks = t.subtitles }
+            } catch { /* discovery is best-effort — start playback regardless */ }
+            if (gen !== this._mx.gen) return // superseded during discovery
+          }
           const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: 0, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
           if (gen !== this._mx.gen) { await session.stop(); return } // superseded while starting
           this.session = session
           this.currentCodec = this._resolveVideoCodec()
           this.status = 'playing'
-          // Track discovery opens a SECOND connection to the source (ffprobe). For LIVE that races
-          // the curl→FIFO feed, and Xtream panels with a 1-connection limit cut the feed → curl
-          // dies, ffmpeg hits EOF, and playback stalls after the initial burst (~20s). Live rarely
-          // has selectable tracks, so skip discovery for live and keep the single-connection
-          // guarantee; VOD reads a finite file where a short probe alongside playback is tolerated.
-          // Discovery is non-blocking: playback already started on defaults (audio 0, no subtitle),
-          // and the `gen` guard stops a stale probe from a superseded play() clobbering the tracks.
-          if (item.kind !== 'live') {
-            void this._probe(account, item)
-              .then((t) => {
-                if (gen === this._mx.gen) {
-                  this.audioTracks = t.audio
-                  this.subtitleTracks = t.subtitles
-                }
-              })
-              .catch(() => {})
-          }
         } catch (e) {
           if (gen === this._mx.gen) {
             this.status = 'error'

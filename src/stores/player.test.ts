@@ -326,6 +326,19 @@ describe('usePlayerStore', () => {
     expect(p.subtitleTracks).toEqual([])
   })
 
+  it('VOD probes BEFORE opening the playback connection (never two connections at once)', async () => {
+    const order: string[] = []
+    const engine: PlaybackEngine = {
+      start: vi.fn(async () => { order.push('start'); return { sourceUrl: 'iftv://s', isLive: false, createLoader: () => class {}, stop: vi.fn(async () => {}), readSubtitle: async () => null } }),
+    }
+    const probe = vi.fn(async () => { order.push('probe'); return { audio: [{ index: 0, language: 'tur', codec: 'aac' }], subtitles: [] } })
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {}, probe })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    expect(order).toEqual(['probe', 'start']) // probe finished before the playback connection opened
+    expect(p.audioTracks.length).toBe(1)
+  })
+
   it('setSubtitle restarts ONCE at the same offset with subtitleIndex, single-flight', async () => {
     const starts: unknown[] = []
     const engine: PlaybackEngine = {
