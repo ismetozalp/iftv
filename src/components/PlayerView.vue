@@ -4,7 +4,6 @@ import Hls from 'hls.js'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { formatTime, clampFraction } from '@/core/media/seekbar'
-import { resolveEncoder } from '@/core/media/encoder'
 
 const player = usePlayerStore()
 const settings = useSettingsStore()
@@ -35,7 +34,7 @@ function armWatchdog() {
     if (!v) return
     const hasVideoTrack = hls?.levels?.some((l) => l.videoCodec) ?? false
     if (!(hasVideoTrack && v.currentTime > 0 && v.videoWidth === 0)) return // audio-only or decoding fine
-    if (!player.transcode && !triedTranscode) { triedTranscode = true; void player.retryWithTranscode() }
+    if (!player.transcode && !triedTranscode && settings.transcodeMode !== 'off') { triedTranscode = true; void player.retryWithTranscode() }
     else if (player.transcode && player.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware() }
   }, 6000)
 }
@@ -44,7 +43,7 @@ function onLoadedData() {
   clearWatchdog()
 }
 
-const isGpuTranscode = computed(() => resolveEncoder(settings.transcodeMode, settings.encoderTest) === 'nvenc')
+const isGpuTranscode = computed(() => player.currentCodec === 'nvenc') // reflect the ACTUAL codec (post-fallback)
 
 function teardown() {
   clearWatchdog()
@@ -94,9 +93,10 @@ watch(
         // drop to software (x264). x264 is the last resort → then surface the error.
         const undecodable = codecErrorDetails.has(data.details) || data.type === Hls.ErrorTypes.MEDIA_ERROR
         if (undecodable) {
-          if (!player.transcode && !triedTranscode) { triedTranscode = true; void player.retryWithTranscode(); return }
+          if (!player.transcode && !triedTranscode && settings.transcodeMode !== 'off') { triedTranscode = true; void player.retryWithTranscode(); return }
           if (player.transcode && player.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware(); return }
         }
+        // (transcodeMode 'off' or already on x264 → fall through to teardown+fail, no zombie session)
         teardown()
         void player.fail(`Playback error: ${data.details}`)
       })

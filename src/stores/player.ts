@@ -64,8 +64,7 @@ export const usePlayerStore = defineStore('player', {
       } catch (e) {
         if (opts.videoCodec === 'nvenc') {
           this._forceSoftware = true // stick to software for this item (incl. later seeks)
-          const fallbackEngine = await this._engine()
-          return fallbackEngine.start(account, item, { ...opts, videoCodec: 'x264' })
+          return engine.start(account, item, { ...opts, videoCodec: 'x264' })
         }
         throw e
       }

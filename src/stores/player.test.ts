@@ -251,6 +251,7 @@ describe('usePlayerStore', () => {
     expect(starts[1]).toMatchObject({ videoCodec: 'x264' })
     expect(p.status).toBe('playing')
     expect(p.transcode).toBe(true)
+    expect(p.currentCodec).toBe('x264') // reflects the codec that actually started
   })
 
   it('fallbackToSoftware restarts ONCE on x264 when the active session is nvenc, at the same offset', async () => {
