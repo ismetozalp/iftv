@@ -68,6 +68,25 @@ describe('createPlaybackEngine.start', () => {
     expect(sVod.isLive).toBe(false)
   })
 
+  it('LIVE = curl+ffmpeg over a FIFO; VOD = a single ffmpeg reading the URL directly with -ss (no curl/fifo)', async () => {
+    const dLive = deps()
+    const sLive = await createPlaybackEngine(dLive).start(XT, item) // live
+    expect(sLive.isLive).toBe(true)
+    expect(dLive.mkfifo).toHaveBeenCalled()
+    const liveCalls = spawnArgs(dLive).map((a) => a[0]); expect(liveCalls).toContain('curl'); expect(liveCalls).toContain('ffmpeg')
+
+    const movie = { ...item, id: 'x:movie:9', kind: 'movie' as const, streamId: '9', containerExtension: 'mkv' }
+    const dVod = deps()
+    const sVod = await createPlaybackEngine(dVod).start(XT, movie, { startOffsetSeconds: 120 })
+    expect(sVod.isLive).toBe(false)
+    expect(dVod.mkfifo).not.toHaveBeenCalled()                    // no FIFO for VOD
+    const vodCalls = spawnArgs(dVod).map((a) => a[0]); expect(vodCalls).not.toContain('curl') // no curl for VOD
+    const ff = spawnArgs(dVod).find((a) => a[0] === 'ffmpeg')!.join(' ')
+    expect(ff).toContain('-ss 120')
+    expect(ff).toContain('http://h:8080/movie/u/p/9.mkv')          // reads the panel url directly
+    expect(ff).toContain('-hls_playlist_type event')
+  })
+
   it('waits (polls) for the playlist to appear before returning', async () => {
     let n = 0
     const d = deps({ readFile: vi.fn(async () => (++n < 3 ? null : new TextEncoder().encode('#EXTM3U'))) })

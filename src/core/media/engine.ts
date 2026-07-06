@@ -1,8 +1,8 @@
 import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
-import type { EngineDeps, PlaybackEngine, PlaybackSession } from './PlaybackEngine'
+import type { EngineDeps, FfmpegProc, PlaybackEngine, PlaybackSession } from './PlaybackEngine'
 import { playbackUrl } from './streamUrl'
-import { buildCurlArgs, buildRemuxArgs, STREAM_USER_AGENT } from './ffmpegArgs'
+import { buildCurlArgs, buildLiveRemuxArgs, buildVodRemuxArgs, STREAM_USER_AGENT } from './ffmpegArgs'
 import { cacheRoot, sessionDir, playlistPath, segmentPattern, sourceUrl, resolveInDir } from './session'
 import { createCockpitLoaderClass } from './hlsLoader'
 
@@ -11,30 +11,38 @@ const PLAYLIST_INTERVAL_MS = 500
 
 export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
   return {
-    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number }): Promise<PlaybackSession> {
+    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number }): Promise<PlaybackSession> {
       const inputUrl = playbackUrl(account, item)
       if (!inputUrl) throw new Error('This item is not playable')
 
       const id = deps.newId()
       const dir = sessionDir(cacheRoot(await deps.home()), id)
       await deps.mkdir(dir)
-      const fifo = `${dir}/in.ts`
-      await deps.mkfifo(fifo)
 
-      // Live = rolling window sized to hold the buffer (>= bufferSeconds of 4s segments).
-      // Movie/episode = finite VOD: keep every segment so hls.js gets a duration + seeking.
+      // Live = rolling window (curl→FIFO, unchanged), sized to hold the buffer (>= bufferSeconds
+      // of 4s segments). Movie/episode = finite VOD: ffmpeg reads the panel url directly with
+      // `-ss <offset>` (spike-proven HTTP range-seekable, no redirect) — no curl, no FIFO, so the
+      // panel never sees more than the one ffmpeg connection.
       const live = item.kind === 'live'
       const bufferSeconds = opts?.bufferSeconds ?? 30
-      const liveWindow = Math.max(6, Math.ceil(bufferSeconds / 4) + 2)
 
-      // curl fetches the upstream (following the panel's cross-host 302 redirect, which ffmpeg
-      // stalls on for many Xtream panels) and writes it into the FIFO; ffmpeg reads the FIFO — a
-      // local input, so no redirect/HTTP quirks — and remuxes to HLS.
-      const curl = deps.spawn(['curl', ...buildCurlArgs({ url: inputUrl, outPath: fifo, userAgent: STREAM_USER_AGENT })])
-      const ff = deps.spawn(['ffmpeg', ...buildRemuxArgs({ inputPath: fifo, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), live, liveWindow, burstSeconds: bufferSeconds })])
+      let procs: FfmpegProc[]
+      if (live) {
+        const fifo = `${dir}/in.ts`
+        await deps.mkfifo(fifo)
+        const liveWindow = Math.max(6, Math.ceil(bufferSeconds / 4) + 2)
+        // curl fetches the upstream (following the panel's cross-host 302 redirect, which ffmpeg
+        // stalls on for many Xtream panels) and writes it into the FIFO; ffmpeg reads the FIFO —
+        // a local input, so no redirect/HTTP quirks — and remuxes to HLS.
+        const curl = deps.spawn(['curl', ...buildCurlArgs({ url: inputUrl, outPath: fifo, userAgent: STREAM_USER_AGENT })])
+        const ff = deps.spawn(['ffmpeg', ...buildLiveRemuxArgs({ inputPath: fifo, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir) })])
+        procs = [curl, ff]
+      } else {
+        const ff = deps.spawn(['ffmpeg', ...buildVodRemuxArgs({ inputUrl, offsetSeconds: opts?.startOffsetSeconds ?? 0, burstSeconds: bufferSeconds, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir) })])
+        procs = [ff]
+      }
       const stopAll = (problem: string) => {
-        curl.close(problem)
-        ff.close(problem)
+        procs.forEach((p) => p.close(problem))
       }
 
       const pl = playlistPath(dir)

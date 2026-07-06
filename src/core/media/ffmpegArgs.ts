@@ -22,39 +22,58 @@ export function buildCurlArgs({ url, outPath, userAgent }: CurlArgsInput): strin
   ]
 }
 
-export interface RemuxArgsInput {
+export interface LiveRemuxArgsInput {
   inputPath: string // local FIFO fed by curl
+  liveWindow: number // segments retained for live (sized from the buffer setting)
   playlistPath: string
   segmentPath: string
-  live?: boolean // true = rolling live window; false = VOD (keep every segment)
-  liveWindow?: number // segments retained for live (sized from the buffer setting)
-  burstSeconds?: number // VOD: seconds to burst-read before pacing to realtime (fills the buffer)
 }
 
 // ffmpeg reads the local FIFO (no network — no redirect/HTTP quirks), remuxes video and
-// transcodes audio to AAC into HLS. LIVE = a rolling window (old segments deleted, no ENDLIST).
-// VOD (movie/episode, finite) = an EVENT playlist keeping ALL segments so hls.js knows the
-// duration, can seek, and never skips (ENDLIST is written when ffmpeg finishes).
-// (HEVC video needs a video transcode — deferred to Plan 3c.)
-export function buildRemuxArgs({ inputPath, playlistPath, segmentPath, live = true, liveWindow = 6, burstSeconds = 30 }: RemuxArgsInput): string[] {
-  const hls = live
-    ? ['-hls_list_size', String(liveWindow), '-hls_flags', 'delete_segments+append_list+omit_endlist']
-    : ['-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_flags', 'append_list']
+// transcodes audio to AAC into HLS. A rolling window: old segments deleted, no ENDLIST
+// (the stream keeps going).
+export function buildLiveRemuxArgs({ inputPath, liveWindow, playlistPath, segmentPath }: LiveRemuxArgsInput): string[] {
   return [
     '-y',
-    // VOD: burst the first `burstSeconds` (fills the player buffer for a smooth start), then pace to
-    // realtime so ffmpeg (copy is far faster than realtime) can't race the file and push the "edge"
-    // minutes ahead of the playhead. Live is already realtime — no rate limiting.
-    ...(live ? [] : ['-readrate', '1', '-readrate_initial_burst', String(burstSeconds)]),
     '-i', inputPath,
     '-c:v', 'copy',
     '-c:a', 'aac',
     '-b:a', '128k',
     '-f', 'hls',
     '-hls_time', '4',
-    ...hls,
+    '-hls_list_size', String(liveWindow),
+    '-hls_flags', 'delete_segments+append_list+omit_endlist',
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', segmentPath,
+    playlistPath,
+  ]
+}
+
+export interface VodRemuxArgsInput {
+  inputUrl: string // panel movie/episode url — ffmpeg reads it directly (HTTP range-seekable, no redirect)
+  offsetSeconds: number // -ss before -i: fast input seek via HTTP range
+  burstSeconds: number // seconds to burst-read before pacing to realtime (fills the buffer)
+  playlistPath: string
+  segmentPath: string
+}
+
+// ffmpeg reads the panel movie/episode URL directly (spike-proven: HTTP range-seekable,
+// no redirect) with `-ss` for a fast input seek to the requested offset. Burst the first
+// `burstSeconds` (fills the player buffer for a smooth start), then pace to realtime so
+// ffmpeg (copy is far faster than realtime) can't race the file. EVENT playlist keeps ALL
+// segments so hls.js knows the duration, can seek, and never skips (ENDLIST written when
+// ffmpeg finishes). (HEVC video needs a video transcode — deferred to Plan 3c.)
+export function buildVodRemuxArgs({ inputUrl, offsetSeconds, burstSeconds, playlistPath, segmentPath }: VodRemuxArgsInput): string[] {
+  return [
+    '-y',
+    '-user_agent', STREAM_USER_AGENT,
+    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+    '-ss', String(offsetSeconds),                  // input seek → HTTP range, fast
+    '-readrate', '1', '-readrate_initial_burst', String(burstSeconds),
+    '-i', inputUrl,
+    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
+    '-f', 'hls', '-hls_time', '4', '-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_flags', 'append_list',
+    '-hls_segment_type', 'mpegts', '-hls_segment_filename', segmentPath,
     playlistPath,
   ]
 }
