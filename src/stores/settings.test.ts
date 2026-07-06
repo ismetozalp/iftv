@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useSettingsStore } from './settings'
+import { useSettingsStore, DEFAULT_EPG_URL } from './settings'
 import { createMemoryStore } from '@/core/storage/appState'
 
 describe('useSettingsStore', () => {
@@ -40,6 +40,7 @@ describe('useSettingsStore', () => {
       encoderTest: null,
       cacheDir: '',
       cacheLimitGb: 5,
+      epgUrl: DEFAULT_EPG_URL,
     })
   })
 
@@ -254,5 +255,61 @@ describe('useSettingsStore', () => {
     expect(r.ok).toBe(false)
     expect(probed).toBe(false) // rejected before touching the filesystem
     expect(s.cacheDir).toBe('')
+  })
+
+  it('defaults epgUrl to DEFAULT_EPG_URL before loading', () => {
+    const s = useSettingsStore()
+    expect(s.epgUrl).toBe(DEFAULT_EPG_URL)
+  })
+
+  it('load back-compat: an old settings.json without epgUrl defaults it', async () => {
+    const store = createMemoryStore({ 'settings.json': { bufferSeconds: 45 } })
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    expect(s.epgUrl).toBe(DEFAULT_EPG_URL)
+  })
+
+  it('load reads a persisted epgUrl from the store', async () => {
+    const store = createMemoryStore({ 'settings.json': { bufferSeconds: 45, epgUrl: 'https://example.com/epg.xml' } })
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    expect(s.epgUrl).toBe('https://example.com/epg.xml')
+  })
+
+  it('setEpgUrl accepts an http(s) URL and persists it', async () => {
+    const store = createMemoryStore()
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    const r = await s.setEpgUrl('https://example.com/epg.xml')
+    expect(r).toEqual({ ok: true })
+    expect(s.epgUrl).toBe('https://example.com/epg.xml')
+
+    const s2 = useSettingsStore()
+    s2.$configure({ store })
+    await s2.load()
+    expect(s2.epgUrl).toBe('https://example.com/epg.xml')
+  })
+
+  it('setEpgUrl accepts an empty string to disable EPG', async () => {
+    const store = createMemoryStore()
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    const r = await s.setEpgUrl('')
+    expect(r).toEqual({ ok: true })
+    expect(s.epgUrl).toBe('')
+  })
+
+  it('setEpgUrl rejects a non-http(s) value and leaves epgUrl unchanged', async () => {
+    const store = createMemoryStore()
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    const r = await s.setEpgUrl('not a url')
+    expect(r.ok).toBe(false)
+    expect(s.epgUrl).toBe(DEFAULT_EPG_URL)
   })
 })

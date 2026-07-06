@@ -12,6 +12,9 @@ const DEFAULT_TRANSCODE_MODE: TranscodeMode = 'auto'
 const TRANSCODE_MODES: TranscodeMode[] = ['auto', 'gpu', 'software', 'off']
 const DEFAULT_CACHE_LIMIT_GB = 5
 const MIN_CACHE_LIMIT_GB = 1
+export const DEFAULT_EPG_URL = 'https://epgshare01.online/epgshare01/epg_ripper_TR1.xml.gz'
+export const EPG_TTL_MS = 12 * 3600 * 1000
+const EPG_URL_RE = /^https?:\/\//
 
 interface Deps {
   store: JsonStore
@@ -25,6 +28,7 @@ interface PersistedSettings {
   encoderTest: EncoderTest | null
   cacheDir: string
   cacheLimitGb: number
+  epgUrl: string
 }
 
 function clampBufferSeconds(n: number): number {
@@ -42,6 +46,7 @@ export const useSettingsStore = defineStore('settings', {
     encoderTest: null as EncoderTest | null,
     cacheDir: '' as string,
     cacheLimitGb: DEFAULT_CACHE_LIMIT_GB,
+    epgUrl: DEFAULT_EPG_URL as string,
     _deps: null as Deps | null,
   }),
   actions: {
@@ -60,6 +65,7 @@ export const useSettingsStore = defineStore('settings', {
         encoderTest: this.encoderTest,
         cacheDir: this.cacheDir,
         cacheLimitGb: this.cacheLimitGb,
+        epgUrl: this.epgUrl,
       }
       await store.save('settings.json', value)
     },
@@ -71,12 +77,14 @@ export const useSettingsStore = defineStore('settings', {
         encoderTest: null as EncoderTest | null,
         cacheDir: '',
         cacheLimitGb: DEFAULT_CACHE_LIMIT_GB,
+        epgUrl: DEFAULT_EPG_URL,
       })
       this.bufferSeconds = clampBufferSeconds(loaded.bufferSeconds)
       this.transcodeMode = loaded.transcodeMode ?? DEFAULT_TRANSCODE_MODE
       this.encoderTest = loaded.encoderTest ?? null
       this.cacheDir = loaded.cacheDir ?? ''
       this.cacheLimitGb = clampCacheLimitGb(loaded.cacheLimitGb ?? DEFAULT_CACHE_LIMIT_GB)
+      this.epgUrl = loaded.epgUrl ?? DEFAULT_EPG_URL
     },
     async setBufferSeconds(n: number) {
       this.bufferSeconds = clampBufferSeconds(n)
@@ -107,6 +115,14 @@ export const useSettingsStore = defineStore('settings', {
         if (!ok) return { ok: false, error: 'Directory is not writable' }
       }
       this.cacheDir = d
+      await this._persist()
+      return { ok: true }
+    },
+    // '' disables EPG fetching; otherwise must look like an http(s) URL.
+    async setEpgUrl(url: string): Promise<{ ok: boolean; error?: string }> {
+      const u = url.trim()
+      if (u && !EPG_URL_RE.test(u)) return { ok: false, error: 'Use a valid http(s) URL' }
+      this.epgUrl = u
       await this._persist()
       return { ok: true }
     },

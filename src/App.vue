@@ -9,15 +9,18 @@ import SettingsView from '@/views/settings/SettingsView.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSettingsStore } from '@/stores/settings'
 import { useCollectionsStore } from '@/stores/collections'
+import { useEpgStore } from '@/stores/epg'
 
 const ws = useWorkspaceStore()
 const settings = useSettingsStore()
 const collections = useCollectionsStore()
+const epg = useEpgStore()
 const settingsOpen = ref(false)
 onMounted(() => {
   void ws.init()
   void settings.load()
   void collections.load()
+  void epg.load().then(() => epg.ensureFresh())
 })
 </script>
 

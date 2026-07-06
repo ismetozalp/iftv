@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import cockpit from 'cockpit'
-import { useSettingsStore } from '@/stores/settings'
+import { useSettingsStore, DEFAULT_EPG_URL } from '@/stores/settings'
 import { usePlayerStore } from '@/stores/player'
+import { useEpgStore } from '@/stores/epg'
 import { resolveCacheRoot } from '@/core/media/session'
 import { cacheSizeBytes, clearCache } from '@/adapters/cockpitCache'
 import type { TranscodeMode } from '@/core/media/encoder'
@@ -12,6 +13,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const settings = useSettingsStore()
 const player = usePlayerStore()
+const epg = useEpgStore()
 
 function onInput(e: Event) {
   const n = Number((e.target as HTMLInputElement).value)
@@ -52,10 +54,30 @@ async function refreshCache() {
   cacheSizeLabel.value = formatBytes(b)
 }
 
+// TV Guide (EPG)
+const epgUrlInput = ref(settings.epgUrl)
+const epgError = ref('')
+
+function formatRelative(ms: number): string {
+  if (!ms) return 'never'
+  const diffSec = Math.max(0, Math.round((Date.now() - ms) / 1000))
+  if (diffSec < 60) return 'just now'
+  const diffMin = Math.round(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.round(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  return `${Math.round(diffHr / 24)}d ago`
+}
+
 watch(
   () => props.open,
   (isOpen) => {
-    if (isOpen) void refreshCache()
+    if (isOpen) {
+      void refreshCache()
+      // Same rationale as cacheDirInput: re-sync from the store on each open so a saved value
+      // isn't clobbered by a stale ref snapshotted before settings.load() resolved at boot.
+      epgUrlInput.value = settings.epgUrl
+    }
   },
   { immediate: true },
 )
@@ -74,6 +96,15 @@ async function onCacheLimit(e: Event) {
 async function onClearCache() {
   await clearCache(resolvedRoot.value)
   await refreshCache()
+}
+
+async function onSaveEpgUrl() {
+  const r = await settings.setEpgUrl(epgUrlInput.value)
+  epgError.value = r.ok ? '' : (r.error ?? 'Invalid')
+}
+
+async function onRefreshEpgNow() {
+  await epg.refresh()
 }
 
 function close() {
@@ -163,6 +194,30 @@ function close() {
             Clear cache now
           </button>
         </div>
+      </div>
+      <div class="mt-3">
+        <h5>TV Guide (EPG)</h5>
+        <label for="iftv-epg-url" class="form-label">EPG URL (XMLTV, optional gzip)</label>
+        <div class="d-flex align-items-center gap-2">
+          <input
+            id="iftv-epg-url"
+            class="form-control"
+            :placeholder="DEFAULT_EPG_URL"
+            v-model="epgUrlInput"
+          />
+          <button class="btn btn-sm btn-outline-secondary" @click="onSaveEpgUrl">Save</button>
+        </div>
+        <small class="text-muted">Leave empty to disable the TV guide.</small>
+        <div class="text-danger small" v-if="epgError">{{ epgError }}</div>
+        <div class="d-flex align-items-center gap-2 mt-2">
+          <button class="btn btn-sm btn-outline-secondary" :disabled="epg.loading" @click="onRefreshEpgNow">
+            {{ epg.loading ? 'Refreshing…' : 'Refresh now' }}
+          </button>
+          <span class="text-muted small">
+            Last updated: {{ formatRelative(epg.loadedAt) }} · {{ Object.keys(epg.index).length }} channels
+          </span>
+        </div>
+        <div class="text-danger small" v-if="epg.error">{{ epg.error }}</div>
       </div>
     </div>
   </div>
