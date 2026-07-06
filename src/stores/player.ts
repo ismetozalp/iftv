@@ -110,17 +110,23 @@ export const usePlayerStore = defineStore('player', {
           this.session = session
           this.currentCodec = this._resolveVideoCodec()
           this.status = 'playing'
-          // Track discovery is non-blocking: playback already started on defaults (audio 0, no
-          // subtitle). Guard the result by `gen` so a stale probe from a superseded play() can
-          // never clobber the tracks of whatever is playing now.
-          void this._probe(account, item)
-            .then((t) => {
-              if (gen === this._mx.gen) {
-                this.audioTracks = t.audio
-                this.subtitleTracks = t.subtitles
-              }
-            })
-            .catch(() => {})
+          // Track discovery opens a SECOND connection to the source (ffprobe). For LIVE that races
+          // the curl→FIFO feed, and Xtream panels with a 1-connection limit cut the feed → curl
+          // dies, ffmpeg hits EOF, and playback stalls after the initial burst (~20s). Live rarely
+          // has selectable tracks, so skip discovery for live and keep the single-connection
+          // guarantee; VOD reads a finite file where a short probe alongside playback is tolerated.
+          // Discovery is non-blocking: playback already started on defaults (audio 0, no subtitle),
+          // and the `gen` guard stops a stale probe from a superseded play() clobbering the tracks.
+          if (item.kind !== 'live') {
+            void this._probe(account, item)
+              .then((t) => {
+                if (gen === this._mx.gen) {
+                  this.audioTracks = t.audio
+                  this.subtitleTracks = t.subtitles
+                }
+              })
+              .catch(() => {})
+          }
         } catch (e) {
           if (gen === this._mx.gen) {
             this.status = 'error'

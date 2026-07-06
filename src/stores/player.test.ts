@@ -314,6 +314,18 @@ describe('usePlayerStore', () => {
     expect(probe).toHaveBeenCalledWith(ACCT, MOVIE)
   })
 
+  it('play() does NOT probe a LIVE channel (a 2nd connection would stall the feed on 1-connection panels)', async () => {
+    const { engine } = engineWith()
+    const probe = vi.fn(async () => ({ audio: [{ index: 0, language: 'tur', codec: 'aac' }], subtitles: [] }))
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {}, probe })
+    await p.play(ACCT, item) // `item` is the live channel
+    await Promise.resolve()
+    expect(probe).not.toHaveBeenCalled()
+    expect(p.audioTracks).toEqual([])
+    expect(p.subtitleTracks).toEqual([])
+  })
+
   it('setSubtitle restarts ONCE at the same offset with subtitleIndex, single-flight', async () => {
     const starts: unknown[] = []
     const engine: PlaybackEngine = {
