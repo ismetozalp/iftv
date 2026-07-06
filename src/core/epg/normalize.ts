@@ -19,7 +19,7 @@ const TURKISH_LETTERS: Record<string, string> = {
 }
 
 const COUNTRY_PREFIX_RE = /^(?:[A-Z]{2,3}\s*[:|]\s*|\[[A-Z]{2}\]\s*)/
-const QUALITY_TOKEN_RE = /\b(?:HD|SD|FHD|UHD|4K|H265|HEVC)\b/g
+const QUALITY_TOKEN_RE = /\b(?:HD|SD|FHD|UHD|HQ|4K|H265|HEVC|RAW|MULTI)\b/g
 const NON_ALNUM_RE = /[^a-zA-Z0-9 ]+/g
 const MULTI_SPACE_RE = /\s+/g
 
