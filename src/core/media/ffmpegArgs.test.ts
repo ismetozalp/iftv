@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest'
-import { buildCurlArgs, buildLiveRemuxArgs, buildVodRemuxArgs, videoCodecArgs, STREAM_USER_AGENT } from './ffmpegArgs'
+import { buildCurlArgs, buildLiveRemuxArgs, buildLiveUrlRemuxArgs, buildVodRemuxArgs, isHlsUrl, videoCodecArgs, STREAM_USER_AGENT } from './ffmpegArgs'
+
+describe('isHlsUrl + buildLiveUrlRemuxArgs', () => {
+  it('detects .m3u8 URLs (incl. query/hash) but not direct .ts/.mkv', () => {
+    expect(isHlsUrl('http://h/stream.m3u8')).toBe(true)
+    expect(isHlsUrl('http://h/live/x.m3u8?token=1')).toBe(true)
+    expect(isHlsUrl('http://h/live/u/p/7.ts')).toBe(false)
+    expect(isHlsUrl('http://h/movie/u/p/9.mkv')).toBe(false)
+  })
+  it('reads the URL directly with reconnect + rolling window (no FIFO)', () => {
+    const a = buildLiveUrlRemuxArgs({ inputUrl: 'http://h/s.m3u8', liveWindow: 8, playlistPath: '/c/i.m3u8', segmentPath: '/c/s.ts' })
+    expect(a).toContain('-i'); expect(a).toContain('http://h/s.m3u8')
+    expect(a).toContain('-reconnect'); expect(a).toContain('-user_agent')
+    expect(a.join(' ')).toContain('-c:v copy')
+    expect(a).toContain('-hls_list_size'); expect(a).toContain('8')
+    expect(a).toContain('delete_segments+append_list+omit_endlist')
+    expect(a[a.length - 1]).toBe('/c/i.m3u8')
+  })
+  it('honors videoCodec (transcode) for HLS live too', () => {
+    expect(buildLiveUrlRemuxArgs({ inputUrl: 'http://h/s.m3u8', liveWindow: 6, playlistPath: 'p', segmentPath: 's', videoCodec: 'nvenc' }).join(' ')).toContain('-c:v h264_nvenc')
+  })
+})
 
 describe('buildCurlArgs', () => {
   const args = buildCurlArgs({ url: 'http://h/live/u/p/1.ts', outPath: '/c/s/in.ts', userAgent: STREAM_USER_AGENT })

@@ -87,6 +87,17 @@ describe('createPlaybackEngine.start', () => {
     expect(ff).toContain('-hls_playlist_type event')
   })
 
+  it('HLS (.m3u8) live URL → ffmpeg reads it directly, no curl/FIFO (M3U channels)', async () => {
+    const m3u = { ...item, kind: 'live' as const, streamId: null, url: 'http://h/stream.m3u8' }
+    const d = deps()
+    await createPlaybackEngine(d).start(XT, m3u)
+    expect(d.mkfifo).not.toHaveBeenCalled()
+    const calls = spawnArgs(d).map((a) => a[0])
+    expect(calls).not.toContain('curl') // no curl for an .m3u8 (would capture only the playlist)
+    expect(calls).toContain('ffmpeg')
+    expect(spawnArgs(d).find((a) => a[0] === 'ffmpeg')!).toContain('http://h/stream.m3u8')
+  })
+
   it('forwards videoCodec into the ffmpeg args (nvenc transcode for a movie)', async () => {
     const movie = { ...item, id: 'x:movie:9', kind: 'movie' as const, streamId: '9', containerExtension: 'mkv' }
     const d = deps()

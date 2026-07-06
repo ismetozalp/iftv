@@ -2,7 +2,7 @@ import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
 import type { EngineDeps, FfmpegProc, PlaybackEngine, PlaybackSession } from './PlaybackEngine'
 import { playbackUrl } from './streamUrl'
-import { buildCurlArgs, buildLiveRemuxArgs, buildVodRemuxArgs, STREAM_USER_AGENT } from './ffmpegArgs'
+import { buildCurlArgs, buildLiveRemuxArgs, buildLiveUrlRemuxArgs, buildVodRemuxArgs, isHlsUrl, STREAM_USER_AGENT } from './ffmpegArgs'
 import { cacheRoot, sessionDir, playlistPath, segmentPattern, sourceUrl, resolveInDir } from './session'
 import { createCockpitLoaderClass } from './hlsLoader'
 
@@ -27,14 +27,20 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       const bufferSeconds = opts?.bufferSeconds ?? 30
       const videoCodec = opts?.videoCodec ?? 'copy'
 
+      const liveWindow = Math.max(6, Math.ceil(bufferSeconds / 4) + 2)
       let procs: FfmpegProc[]
-      if (live) {
+      if (live && isHlsUrl(inputUrl)) {
+        // HLS (.m3u8) live URL (common for M3U channels): ffmpeg reads the URL directly — its HLS
+        // demuxer fetches the segments. curl→FIFO would only capture the playlist text, not the
+        // media (ffmpeg then errors "Invalid data"). One ffmpeg, one connection.
+        const ff = deps.spawn(['ffmpeg', ...buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec })])
+        procs = [ff]
+      } else if (live) {
         const fifo = `${dir}/in.ts`
         await deps.mkfifo(fifo)
-        const liveWindow = Math.max(6, Math.ceil(bufferSeconds / 4) + 2)
         // curl fetches the upstream (following the panel's cross-host 302 redirect, which ffmpeg
         // stalls on for many Xtream panels) and writes it into the FIFO; ffmpeg reads the FIFO —
-        // a local input, so no redirect/HTTP quirks — and remuxes to HLS.
+        // a local input, so no redirect/HTTP quirks — and remuxes to HLS. Used for direct .ts.
         const curl = deps.spawn(['curl', ...buildCurlArgs({ url: inputUrl, outPath: fifo, userAgent: STREAM_USER_AGENT })])
         const ff = deps.spawn(['ffmpeg', ...buildLiveRemuxArgs({ inputPath: fifo, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec })])
         procs = [curl, ff]

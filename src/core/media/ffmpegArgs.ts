@@ -64,6 +64,39 @@ export function buildLiveRemuxArgs({ inputPath, liveWindow, playlistPath, segmen
   ]
 }
 
+// An HLS playlist URL (common for M3U channels). Such a URL must be read by ffmpeg DIRECTLY —
+// its HLS demuxer fetches the referenced segments. curl→FIFO would only capture the playlist
+// text, not the media (ffmpeg then errors "Invalid data"). Xtream direct-.ts streams are NOT hls.
+export function isHlsUrl(url: string): boolean {
+  return /\.m3u8(\?|#|$)/i.test(url)
+}
+
+export interface LiveUrlRemuxArgsInput {
+  inputUrl: string // an HLS (.m3u8) live URL ffmpeg reads directly
+  liveWindow: number
+  playlistPath: string
+  segmentPath: string
+  videoCodec?: 'copy' | 'nvenc' | 'x264'
+}
+
+// Live from an HLS URL: ffmpeg reads the .m3u8 directly (no curl/FIFO), reconnecting on drops,
+// into the same rolling window as buildLiveRemuxArgs.
+export function buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath, segmentPath, videoCodec = 'copy' }: LiveUrlRemuxArgsInput): string[] {
+  return [
+    '-y',
+    '-user_agent', STREAM_USER_AGENT,
+    '-http_persistent', '0',
+    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_at_eof', '1', '-reconnect_delay_max', '5',
+    '-i', inputUrl,
+    ...videoCodecArgs(videoCodec),
+    '-c:a', 'aac', '-b:a', '128k',
+    '-f', 'hls', '-hls_time', '4', '-hls_list_size', String(liveWindow),
+    '-hls_flags', 'delete_segments+append_list+omit_endlist', '-hls_segment_type', 'mpegts',
+    '-hls_segment_filename', segmentPath,
+    playlistPath,
+  ]
+}
+
 export interface VodRemuxArgsInput {
   inputUrl: string // panel movie/episode url — ffmpeg reads it directly (HTTP range-seekable, no redirect)
   offsetSeconds: number // -ss before -i: fast input seek via HTTP range
