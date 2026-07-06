@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import Hls from 'hls.js'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { formatTime, clampFraction } from '@/core/media/seekbar'
+import { resolveEncoder } from '@/core/media/encoder'
 
 const player = usePlayerStore()
 const settings = useSettingsStore()
@@ -15,7 +16,38 @@ const bufferedEnd = ref(0)
 const paused = ref(false)
 let hls: Hls | null = null
 
+// Undecodable-video detection: hls.js may report a codec/decode error, or (rarely) never report
+// one while audio keeps advancing and the video track just never paints. Either path retries
+// ONCE per session with a forced transcode (see player.retryWithTranscode).
+let triedTranscode = false
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearWatchdog() {
+  if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null }
+}
+
+function armWatchdog() {
+  clearWatchdog()
+  watchdogTimer = setTimeout(() => {
+    watchdogTimer = null
+    const v = video.value
+    if (!v || player.transcode || triedTranscode) return
+    const hasVideoTrack = hls?.levels?.some((l) => l.videoCodec) ?? false
+    if (hasVideoTrack && v.currentTime > 0 && v.videoWidth === 0) {
+      triedTranscode = true
+      void player.retryWithTranscode()
+    }
+  }, 6000)
+}
+
+function onLoadedData() {
+  clearWatchdog()
+}
+
+const isGpuTranscode = computed(() => resolveEncoder(settings.transcodeMode, settings.encoderTest) === 'nvenc')
+
 function teardown() {
+  clearWatchdog()
   if (hls) { hls.destroy(); hls = null }
   buffering.value = false
   now.value = 0
@@ -27,6 +59,7 @@ watch(
   () => player.session,
   (session) => {
     teardown()
+    triedTranscode = false
     if (!session || !video.value) return
     if (Hls.isSupported()) {
       const Loader = session.createLoader() as never
@@ -49,11 +82,19 @@ watch(
         startPosition: session.isLive ? -1 : 0,
       })
       let mediaRecoveries = 0
+      const codecErrorDetails = new Set(['bufferAppendError', 'bufferAddCodecError', 'fragParsingError'])
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return
         // Recover from transient live errors rather than killing the whole session.
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls?.startLoad(); return }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries++ < 3) { hls?.recoverMediaError(); return }
+        // Decode/codec-class failure (or a media error that outlived recovery) — the browser
+        // can't decode this stream as-is. Force a transcode instead of failing, once per session.
+        if (!player.transcode && !triedTranscode && (codecErrorDetails.has(data.details) || data.type === Hls.ErrorTypes.MEDIA_ERROR)) {
+          triedTranscode = true
+          void player.retryWithTranscode()
+          return
+        }
         teardown()
         void player.fail(`Playback error: ${data.details}`)
       })
@@ -61,6 +102,7 @@ watch(
       hls.loadSource(session.sourceUrl)
       hls.attachMedia(video.value)
       hls.on(Hls.Events.MANIFEST_PARSED, () => { void video.value?.play().catch(() => {}) })
+      armWatchdog()
     } else if (video.value.canPlayType('application/vnd.apple.mpegurl')) {
       video.value.src = session.sourceUrl // native HLS (Safari) — fallback, unlikely for iftv://
     }
@@ -99,6 +141,12 @@ function onScrub(e: MouseEvent) {
   <div v-if="player.status !== 'idle'" class="iftv-player">
     <div class="iftv-player-bar">
       <span class="iftv-player-title text-truncate">{{ player.item?.name }}</span>
+      <span v-if="player.transcode" class="iftv-transcoding">Transcoding · {{ isGpuTranscode ? 'GPU' : 'CPU' }}</span>
+      <button
+        v-else-if="settings.transcodeMode !== 'off'"
+        class="btn btn-sm btn-light"
+        @click="player.retryWithTranscode()"
+      >⤵ Transcode</button>
       <button class="btn btn-sm btn-light" @click="close">✕ Close</button>
     </div>
     <div class="iftv-player-body">
@@ -122,6 +170,7 @@ function onScrub(e: MouseEvent) {
         @progress="updatePlayhead"
         @play="paused = false"
         @pause="paused = true"
+        @loadeddata="onLoadedData"
       ></video>
     </div>
     <div v-if="player.duration != null" class="iftv-seekbar">
