@@ -26,8 +26,13 @@ export function buildCurlArgs({ url, outPath, userAgent }: CurlArgsInput): strin
 // (default, cheapest); 'nvenc'/'x264' transcode to H.264 for browsers that can't decode the
 // source codec (chiefly HEVC) — args spike-verified against the host's ffmpeg/NVENC.
 export function videoCodecArgs(codec: 'copy' | 'nvenc' | 'x264'): string[] {
-  if (codec === 'nvenc') return ['-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', 'll', '-b:v', '0', '-cq', '23']
-  if (codec === 'x264') return ['-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', '23']
+  // Force a keyframe every 4s so the HLS muxer can cut 4s segments (matching -hls_time 4).
+  // Without this the encoder's own GOP can run tens of seconds, so the first segment — and thus
+  // playback — is delayed until the next keyframe. (copy inherits the source's keyframes.)
+  const keyframes = ['-force_key_frames', 'expr:gte(t,n_forced*4)']
+  // NVENC ignores -force_key_frames unless -forced-idr is set (verified: without it, 0 segments cut).
+  if (codec === 'nvenc') return ['-c:v', 'h264_nvenc', '-preset', 'p4', '-tune', 'll', '-b:v', '0', '-cq', '23', ...keyframes, '-forced-idr', '1']
+  if (codec === 'x264') return ['-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', '23', ...keyframes]
   return ['-c:v', 'copy']
 }
 

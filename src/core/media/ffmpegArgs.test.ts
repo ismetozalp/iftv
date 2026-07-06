@@ -58,8 +58,8 @@ describe('buildVodRemuxArgs', () => {
 describe('videoCodecArgs', () => {
   it('maps codecs', () => {
     expect(videoCodecArgs('copy')).toEqual(['-c:v', 'copy'])
-    expect(videoCodecArgs('nvenc').join(' ')).toBe('-c:v h264_nvenc -preset p4 -tune ll -b:v 0 -cq 23')
-    expect(videoCodecArgs('x264').join(' ')).toBe('-c:v libx264 -preset veryfast -tune zerolatency -crf 23')
+    expect(videoCodecArgs('nvenc').join(' ')).toBe('-c:v h264_nvenc -preset p4 -tune ll -b:v 0 -cq 23 -force_key_frames expr:gte(t,n_forced*4) -forced-idr 1')
+    expect(videoCodecArgs('x264').join(' ')).toBe('-c:v libx264 -preset veryfast -tune zerolatency -crf 23 -force_key_frames expr:gte(t,n_forced*4)')
   })
 })
 
