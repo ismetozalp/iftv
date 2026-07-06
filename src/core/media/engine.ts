@@ -11,7 +11,7 @@ const PLAYLIST_INTERVAL_MS = 500
 
 export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
   return {
-    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264' }): Promise<PlaybackSession> {
+    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null }): Promise<PlaybackSession> {
       const inputUrl = playbackUrl(account, item)
       if (!inputUrl) throw new Error('This item is not playable')
 
@@ -26,6 +26,9 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       const live = item.kind === 'live'
       const bufferSeconds = opts?.bufferSeconds ?? 30
       const videoCodec = opts?.videoCodec ?? 'copy'
+      const audioIndex = opts?.audioIndex ?? 0
+      const subtitleIndex = opts?.subtitleIndex ?? null
+      const subtitlePath = subtitleIndex != null ? `${dir}/sub.vtt` : null
 
       const liveWindow = Math.max(6, Math.ceil(bufferSeconds / 4) + 2)
       let procs: FfmpegProc[]
@@ -33,7 +36,7 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
         // HLS (.m3u8) live URL (common for M3U channels): ffmpeg reads the URL directly — its HLS
         // demuxer fetches the segments. curl→FIFO would only capture the playlist text, not the
         // media (ffmpeg then errors "Invalid data"). One ffmpeg, one connection.
-        const ff = deps.spawn(['ffmpeg', ...buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec })])
+        const ff = deps.spawn(['ffmpeg', ...buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec, audioIndex, subtitleIndex, subtitlePath })])
         procs = [ff]
       } else if (live) {
         const fifo = `${dir}/in.ts`
@@ -42,10 +45,10 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
         // stalls on for many Xtream panels) and writes it into the FIFO; ffmpeg reads the FIFO —
         // a local input, so no redirect/HTTP quirks — and remuxes to HLS. Used for direct .ts.
         const curl = deps.spawn(['curl', ...buildCurlArgs({ url: inputUrl, outPath: fifo, userAgent: STREAM_USER_AGENT })])
-        const ff = deps.spawn(['ffmpeg', ...buildLiveRemuxArgs({ inputPath: fifo, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec })])
+        const ff = deps.spawn(['ffmpeg', ...buildLiveRemuxArgs({ inputPath: fifo, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec, audioIndex, subtitleIndex, subtitlePath })])
         procs = [curl, ff]
       } else {
-        const ff = deps.spawn(['ffmpeg', ...buildVodRemuxArgs({ inputUrl, offsetSeconds: opts?.startOffsetSeconds ?? 0, burstSeconds: bufferSeconds, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec })])
+        const ff = deps.spawn(['ffmpeg', ...buildVodRemuxArgs({ inputUrl, offsetSeconds: opts?.startOffsetSeconds ?? 0, burstSeconds: bufferSeconds, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec, audioIndex, subtitleIndex, subtitlePath })])
         procs = [ff]
       }
       const stopAll = (problem: string) => {
@@ -70,6 +73,7 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
         sourceUrl: sourceUrl(id),
         isLive: live,
         createLoader: () => Loader,
+        readSubtitle: async () => (subtitlePath ? deps.readFile(subtitlePath) : null),
         async stop() {
           stopAll('terminated')
           await deps.rmrf(dir)

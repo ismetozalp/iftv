@@ -14,7 +14,7 @@ const MOVIE: ContentItem = { id: 'x:movie:9', kind: 'movie', name: 'A Movie', lo
 function engineWith(session: Partial<PlaybackSession> = {}): { engine: PlaybackEngine; stop: ReturnType<typeof vi.fn> } {
   const stop = vi.fn(async () => {})
   const engine: PlaybackEngine = {
-    start: vi.fn(async () => ({ sourceUrl: 'iftv://s/index.m3u8', isLive: false, createLoader: () => class {}, stop, ...session })),
+    start: vi.fn(async () => ({ sourceUrl: 'iftv://s/index.m3u8', isLive: false, createLoader: () => class {}, stop, readSubtitle: async () => null, ...session })),
   }
   return { engine, stop }
 }
@@ -90,7 +90,7 @@ describe('usePlayerStore', () => {
     const order: string[] = []
     const stop = vi.fn(async () => { order.push('stop') })
     const engine: PlaybackEngine = {
-      start: vi.fn(async () => { order.push('start'); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop } }),
+      start: vi.fn(async () => { order.push('start'); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop, readSubtitle: async () => null } }),
     }
     const p = usePlayerStore()
     p.$configure({ engine, sleep: async () => { order.push('settle') } })
@@ -120,7 +120,7 @@ describe('usePlayerStore', () => {
       start: vi.fn(async () => {
         active++
         maxActive = Math.max(maxActive, active)
-        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => { active-- } }
+        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => { active-- }, readSubtitle: async () => null }
       }),
     }
     const p = usePlayerStore()
@@ -139,7 +139,7 @@ describe('usePlayerStore', () => {
     const engine: PlaybackEngine = {
       start: vi.fn(async () => {
         active++; maxActive = Math.max(maxActive, active)
-        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => { active-- } }
+        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => { active-- }, readSubtitle: async () => null }
       }),
     }
     const p = usePlayerStore()
@@ -174,7 +174,7 @@ describe('usePlayerStore', () => {
   it('retryWithTranscode restarts the SAME item at the same offset with a resolved encoder, once', async () => {
     const starts: unknown[] = []
     const engine: PlaybackEngine = {
-      start: vi.fn(async (_a, _i, o) => { starts.push(o); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} } }),
+      start: vi.fn(async (_a, _i, o) => { starts.push(o); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {}, readSubtitle: async () => null } }),
     }
     const p = usePlayerStore()
     p.$configure({ engine, sleep: async () => {} })
@@ -190,7 +190,7 @@ describe('usePlayerStore', () => {
 
   it('a seek after transcoding stays transcoded', async () => {
     const engine: PlaybackEngine = {
-      start: vi.fn(async () => ({ sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} })),
+      start: vi.fn(async () => ({ sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {}, readSubtitle: async () => null })),
     }
     const p = usePlayerStore()
     p.$configure({ engine, sleep: async () => {} })
@@ -204,7 +204,7 @@ describe('usePlayerStore', () => {
 
   it('play() resets transcode to copy', async () => {
     const engine: PlaybackEngine = {
-      start: vi.fn(async () => ({ sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} })),
+      start: vi.fn(async () => ({ sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {}, readSubtitle: async () => null })),
     }
     const p = usePlayerStore()
     p.$configure({ engine, sleep: async () => {} })
@@ -237,7 +237,7 @@ describe('usePlayerStore', () => {
       start: vi.fn(async (_a, _i, o) => {
         starts.push(o)
         if (o?.videoCodec === 'nvenc') throw new Error('nvenc init failed')
-        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} }
+        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {}, readSubtitle: async () => null }
       }),
     }
     const p = usePlayerStore()
@@ -257,7 +257,7 @@ describe('usePlayerStore', () => {
   it('fallbackToSoftware restarts ONCE on x264 when the active session is nvenc, at the same offset', async () => {
     const starts: string[] = []
     const engine: PlaybackEngine = {
-      start: vi.fn(async (_a, _i, o) => { starts.push(o?.videoCodec); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} } }),
+      start: vi.fn(async (_a, _i, o) => { starts.push(o?.videoCodec); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {}, readSubtitle: async () => null } }),
     }
     const p = usePlayerStore(); p.$configure({ engine, sleep: async () => {} })
     useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })
@@ -276,7 +276,7 @@ describe('usePlayerStore', () => {
   it('a mid-stream nvenc failure sticks to software for later seeks', async () => {
     const starts: string[] = []
     const engine: PlaybackEngine = {
-      start: vi.fn(async (_a, _i, o) => { starts.push(o?.videoCodec); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} } }),
+      start: vi.fn(async (_a, _i, o) => { starts.push(o?.videoCodec); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {}, readSubtitle: async () => null } }),
     }
     const p = usePlayerStore(); p.$configure({ engine, sleep: async () => {} })
     useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })

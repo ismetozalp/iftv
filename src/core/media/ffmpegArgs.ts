@@ -42,15 +42,31 @@ export interface LiveRemuxArgsInput {
   playlistPath: string
   segmentPath: string
   videoCodec?: 'copy' | 'nvenc' | 'x264' // default 'copy'
+  audioIndex?: number // which 0:a:N to map (default 0)
+  subtitleIndex?: number | null // which 0:s:N to burn to WebVTT (default null = no subtitle output)
+  subtitlePath?: string | null // where to write the WebVTT subtitle output (required when subtitleIndex is set)
+}
+
+// Maps the first video stream + the chosen audio stream. Kept explicit (rather than ffmpeg's
+// default stream selection) so audioIndex actually picks the track the user asked for.
+export function mapArgs(audioIndex: number): string[] {
+  return ['-map', '0:v:0', '-map', `0:a:${audioIndex}`]
+}
+
+// A second ffmpeg output: burns the chosen subtitle stream to a standalone WebVTT file (read
+// separately via session.readSubtitle()). Emits nothing when no subtitle was chosen.
+export function subtitleOutputArgs(subtitleIndex: number | null, subtitlePath: string | null): string[] {
+  return subtitleIndex != null && subtitlePath ? ['-map', `0:s:${subtitleIndex}`, '-c:s', 'webvtt', '-f', 'webvtt', subtitlePath] : []
 }
 
 // ffmpeg reads the local FIFO (no network — no redirect/HTTP quirks), remuxes video and
 // transcodes audio to AAC into HLS. A rolling window: old segments deleted, no ENDLIST
 // (the stream keeps going).
-export function buildLiveRemuxArgs({ inputPath, liveWindow, playlistPath, segmentPath, videoCodec = 'copy' }: LiveRemuxArgsInput): string[] {
+export function buildLiveRemuxArgs({ inputPath, liveWindow, playlistPath, segmentPath, videoCodec = 'copy', audioIndex = 0, subtitleIndex = null, subtitlePath = null }: LiveRemuxArgsInput): string[] {
   return [
     '-y',
     '-i', inputPath,
+    ...mapArgs(audioIndex),
     ...videoCodecArgs(videoCodec),
     '-c:a', 'aac',
     '-b:a', '128k',
@@ -61,6 +77,7 @@ export function buildLiveRemuxArgs({ inputPath, liveWindow, playlistPath, segmen
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', segmentPath,
     playlistPath,
+    ...subtitleOutputArgs(subtitleIndex, subtitlePath),
   ]
 }
 
@@ -77,11 +94,14 @@ export interface LiveUrlRemuxArgsInput {
   playlistPath: string
   segmentPath: string
   videoCodec?: 'copy' | 'nvenc' | 'x264'
+  audioIndex?: number
+  subtitleIndex?: number | null
+  subtitlePath?: string | null
 }
 
 // Live from an HLS URL: ffmpeg reads the .m3u8 directly (no curl/FIFO), reconnecting on drops,
 // into the same rolling window as buildLiveRemuxArgs.
-export function buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath, segmentPath, videoCodec = 'copy' }: LiveUrlRemuxArgsInput): string[] {
+export function buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath, segmentPath, videoCodec = 'copy', audioIndex = 0, subtitleIndex = null, subtitlePath = null }: LiveUrlRemuxArgsInput): string[] {
   return [
     '-y',
     '-user_agent', STREAM_USER_AGENT,
@@ -90,12 +110,14 @@ export function buildLiveUrlRemuxArgs({ inputUrl, liveWindow, playlistPath, segm
     // ("could not find codec parameters"); the HLS demuxer reloads the live playlist itself.
     '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
     '-i', inputUrl,
+    ...mapArgs(audioIndex),
     ...videoCodecArgs(videoCodec),
     '-c:a', 'aac', '-b:a', '128k',
     '-f', 'hls', '-hls_time', '4', '-hls_list_size', String(liveWindow),
     '-hls_flags', 'delete_segments+append_list+omit_endlist', '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', segmentPath,
     playlistPath,
+    ...subtitleOutputArgs(subtitleIndex, subtitlePath),
   ]
 }
 
@@ -106,6 +128,9 @@ export interface VodRemuxArgsInput {
   playlistPath: string
   segmentPath: string
   videoCodec?: 'copy' | 'nvenc' | 'x264' // default 'copy'
+  audioIndex?: number
+  subtitleIndex?: number | null
+  subtitlePath?: string | null
 }
 
 // ffmpeg reads the panel movie/episode URL directly (spike-proven: HTTP range-seekable,
@@ -114,7 +139,7 @@ export interface VodRemuxArgsInput {
 // ffmpeg (copy is far faster than realtime) can't race the file. EVENT playlist keeps ALL
 // segments so hls.js knows the duration, can seek, and never skips (ENDLIST written when
 // ffmpeg finishes). (HEVC video needs a video transcode — deferred to Plan 3c.)
-export function buildVodRemuxArgs({ inputUrl, offsetSeconds, burstSeconds, playlistPath, segmentPath, videoCodec = 'copy' }: VodRemuxArgsInput): string[] {
+export function buildVodRemuxArgs({ inputUrl, offsetSeconds, burstSeconds, playlistPath, segmentPath, videoCodec = 'copy', audioIndex = 0, subtitleIndex = null, subtitlePath = null }: VodRemuxArgsInput): string[] {
   return [
     '-y',
     '-user_agent', STREAM_USER_AGENT,
@@ -122,9 +147,11 @@ export function buildVodRemuxArgs({ inputUrl, offsetSeconds, burstSeconds, playl
     '-ss', String(offsetSeconds),                  // input seek → HTTP range, fast
     '-readrate', '1', '-readrate_initial_burst', String(burstSeconds),
     '-i', inputUrl,
+    ...mapArgs(audioIndex),
     ...videoCodecArgs(videoCodec), '-c:a', 'aac', '-b:a', '128k',
     '-f', 'hls', '-hls_time', '4', '-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_flags', 'append_list',
     '-hls_segment_type', 'mpegts', '-hls_segment_filename', segmentPath,
     playlistPath,
+    ...subtitleOutputArgs(subtitleIndex, subtitlePath),
   ]
 }

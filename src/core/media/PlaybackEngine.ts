@@ -6,10 +6,11 @@ export interface PlaybackSession {
   isLive: boolean // live = start at the edge; VOD = start at position 0
   createLoader(): unknown // loader class for Hls { pLoader, fLoader }
   stop(): Promise<void>
+  readSubtitle(): Promise<Uint8Array | null> // WebVTT bytes for the selected subtitle track, or null if none selected
 }
 
 export interface PlaybackEngine {
-  start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264' }): Promise<PlaybackSession>
+  start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null }): Promise<PlaybackSession>
 }
 
 export interface FfmpegProc {

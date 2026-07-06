@@ -133,6 +133,27 @@ describe('createPlaybackEngine.start', () => {
     expect(d.spawn).not.toHaveBeenCalled()
   })
 
+  it('forwards audioIndex + subtitleIndex into the ffmpeg args and exposes readSubtitle', async () => {
+    const movie = { ...item, id: 'x:movie:9', kind: 'movie' as const, streamId: '9', containerExtension: 'mkv' }
+    const d = deps()
+    const s = await createPlaybackEngine(d).start(XT, movie, { audioIndex: 1, subtitleIndex: 0 })
+    const ff = spawnArgs(d).find((a) => a[0] === 'ffmpeg')!.join(' ')
+    expect(ff).toContain('-map 0:a:1')
+    expect(ff).toContain('-map 0:s:0 -c:s webvtt -f webvtt /home/u/.cache/inflighttv/sid/sub.vtt')
+    expect(typeof s.readSubtitle).toBe('function')
+    await s.readSubtitle()
+    expect(d.readFile).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid/sub.vtt')
+  })
+
+  it('default start has no subtitle output and readSubtitle resolves null', async () => {
+    const movie = { ...item, id: 'x:movie:9', kind: 'movie' as const, streamId: '9', containerExtension: 'mkv' }
+    const d = deps()
+    const s = await createPlaybackEngine(d).start(XT, movie)
+    const ff = spawnArgs(d).find((a) => a[0] === 'ffmpeg')!.join(' ')
+    expect(ff).not.toContain('-c:s webvtt')
+    expect(await s.readSubtitle()).toBeNull()
+  })
+
   it('stop() kills both processes with a problem code and removes the dir', async () => {
     const close = vi.fn()
     const d = deps({ spawn: () => ({ close }) })

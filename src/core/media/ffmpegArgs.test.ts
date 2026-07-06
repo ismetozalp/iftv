@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildCurlArgs, buildLiveRemuxArgs, buildLiveUrlRemuxArgs, buildVodRemuxArgs, isHlsUrl, videoCodecArgs, STREAM_USER_AGENT } from './ffmpegArgs'
+import { buildCurlArgs, buildLiveRemuxArgs, buildLiveUrlRemuxArgs, buildVodRemuxArgs, isHlsUrl, videoCodecArgs, mapArgs, subtitleOutputArgs, STREAM_USER_AGENT } from './ffmpegArgs'
 
 describe('isHlsUrl + buildLiveUrlRemuxArgs', () => {
   it('detects .m3u8 URLs (incl. query/hash) but not direct .ts/.mkv', () => {
@@ -81,6 +81,27 @@ describe('videoCodecArgs', () => {
     expect(videoCodecArgs('copy')).toEqual(['-c:v', 'copy'])
     expect(videoCodecArgs('nvenc').join(' ')).toBe('-c:v h264_nvenc -preset p4 -tune ll -b:v 0 -cq 23 -force_key_frames expr:gte(t,n_forced*4) -forced-idr 1')
     expect(videoCodecArgs('x264').join(' ')).toBe('-c:v libx264 -preset veryfast -tune zerolatency -crf 23 -force_key_frames expr:gte(t,n_forced*4)')
+  })
+})
+
+describe('mapArgs + subtitleOutputArgs', () => {
+  it('mapArgs maps first video + the chosen audio', () => {
+    expect(mapArgs(1)).toEqual(['-map', '0:v:0', '-map', '0:a:1'])
+  })
+  it('subtitleOutputArgs emits a webvtt output only when a subtitle is chosen', () => {
+    expect(subtitleOutputArgs(null, null)).toEqual([])
+    expect(subtitleOutputArgs(0, '/c/sub.vtt').join(' ')).toBe('-map 0:s:0 -c:s webvtt -f webvtt /c/sub.vtt')
+  })
+  it('builders insert the audio map and append the subtitle output', () => {
+    const a = buildVodRemuxArgs({ inputUrl: 'http://h/m.mkv', offsetSeconds: 0, burstSeconds: 30, playlistPath: '/c/i.m3u8', segmentPath: '/c/s.ts', audioIndex: 1, subtitleIndex: 0, subtitlePath: '/c/sub.vtt' }).join(' ')
+    expect(a).toContain('-map 0:v:0 -map 0:a:1')
+    expect(a.indexOf('-map 0:a:1')).toBeLessThan(a.indexOf('-c:v')) // maps before codec
+    expect(a).toContain('-map 0:s:0 -c:s webvtt -f webvtt /c/sub.vtt')
+    expect(a.indexOf('/c/i.m3u8')).toBeLessThan(a.indexOf('-map 0:s:0')) // sub output AFTER the playlist
+  })
+  it('no maps change / no sub output by default', () => {
+    const a = buildVodRemuxArgs({ inputUrl: 'u', offsetSeconds: 0, burstSeconds: 30, playlistPath: 'p', segmentPath: 's' }).join(' ')
+    expect(a).toContain('-map 0:v:0 -map 0:a:0'); expect(a).not.toContain('-c:s webvtt')
   })
 })
 
