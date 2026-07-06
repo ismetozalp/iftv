@@ -9,11 +9,14 @@ const player = usePlayerStore()
 const settings = useSettingsStore()
 const video = ref<HTMLVideoElement | null>(null)
 const track = ref<HTMLElement | null>(null)
+const subTrack = ref<HTMLTrackElement | null>(null)
 const buffering = ref(false)
 const now = ref(0)
 const bufferedEnd = ref(0)
 const paused = ref(false)
 let hls: Hls | null = null
+let subTimer: ReturnType<typeof setInterval> | null = null
+let subBlobUrl: string | null = null
 
 // Undecodable-video detection: hls.js may report a codec/decode error, or (rarely) never report
 // one while audio keeps advancing and the video track just never paints. Either path retries
@@ -58,7 +61,37 @@ function teardown() {
   now.value = 0
   bufferedEnd.value = 0
   paused.value = false
+  if (subTimer) { clearInterval(subTimer); subTimer = null }
+  if (subBlobUrl) { URL.revokeObjectURL(subBlobUrl); subBlobUrl = null }
 }
+
+// Poll the (growing) WebVTT subtitle file every ~3s and refresh the <track> blob src so newly
+// muxed cues show up. Off/no-session → stop the timer and clear the track.
+async function refreshSub() {
+  if (player.selectedSubtitle == null || !player.session) {
+    if (subTimer) { clearInterval(subTimer); subTimer = null }
+    if (subBlobUrl) { URL.revokeObjectURL(subBlobUrl); subBlobUrl = null }
+    if (subTrack.value) subTrack.value.src = ''
+    return
+  }
+  if (subTimer) clearInterval(subTimer)
+  const tick = async () => {
+    const bytes = await player.session?.readSubtitle()
+    if (bytes && bytes.byteLength) {
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'text/vtt' }))
+      if (subBlobUrl) URL.revokeObjectURL(subBlobUrl)
+      subBlobUrl = url
+      if (subTrack.value) {
+        subTrack.value.src = url
+        if (subTrack.value.track) subTrack.value.track.mode = 'showing'
+      }
+    }
+  }
+  subTimer = setInterval(() => { void tick() }, 3000)
+  await tick()
+}
+
+watch([() => player.selectedSubtitle, () => player.session], refreshSub, { immediate: true })
 
 watch(
   () => player.session,
@@ -150,6 +183,25 @@ function onScrub(e: MouseEvent) {
     <div class="iftv-player-bar">
       <span class="iftv-player-title text-truncate">{{ player.item?.name }}</span>
       <span v-if="player.status === 'playing'" class="iftv-transcoding">{{ transcodeBadge }}</span>
+      <select
+        v-if="player.audioTracks.length > 1"
+        class="form-select form-select-sm iftv-track-select"
+        :value="player.selectedAudio"
+        @change="player.setAudioTrack(Number(($event.target as HTMLSelectElement).value))"
+      >
+        <option v-for="t in player.audioTracks" :key="t.index" :value="t.index">{{ t.language || ('Audio ' + t.index) }}</option>
+      </select>
+      <select
+        v-if="player.subtitleTracks.length"
+        class="form-select form-select-sm iftv-track-select"
+        :value="player.selectedSubtitle ?? ''"
+        @change="player.setSubtitle(($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value))"
+      >
+        <option value="">Off</option>
+        <option v-for="t in player.subtitleTracks" :key="t.index" :value="t.index" :disabled="!t.text">
+          {{ (t.language || ('Sub ' + t.index)) + (t.text ? '' : ' (bitmap)') }}
+        </option>
+      </select>
       <button class="btn btn-sm btn-light" @click="close">✕ Close</button>
     </div>
     <div class="iftv-player-body">
@@ -174,7 +226,9 @@ function onScrub(e: MouseEvent) {
         @play="paused = false"
         @pause="paused = true"
         @loadeddata="onLoadedData"
-      ></video>
+      >
+        <track ref="subTrack" kind="subtitles" label="Subtitles" default />
+      </video>
     </div>
     <div v-if="player.duration != null" class="iftv-seekbar">
       <button class="btn btn-sm btn-light" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
