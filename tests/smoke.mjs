@@ -19,6 +19,8 @@ window.cockpit = {
   http: () => ({ get: async (path, params) => {
     if (params && params.action === 'get_live_categories') return JSON.stringify([{ category_id: '1', category_name: 'News' }]);
     if (params && params.action === 'get_live_streams') return JSON.stringify([{ stream_id: 1, name: 'Seed CNN', stream_icon: '', category_id: '1' }]);
+    if (params && params.action === 'get_vod_categories') return JSON.stringify([{ category_id: '10', category_name: 'Films' }]);
+    if (params && params.action === 'get_vod_streams') return JSON.stringify([{ stream_id: 5, name: 'Seed Movie', stream_icon: '', category_id: '10', container_extension: 'mp4' }]);
     return '{}';
   }}),
   file: (p) => { const k = p.split('/').pop(); return { read: async () => (k in files ? files[k] : null), replace: async () => '', close() {} }; },
@@ -47,6 +49,8 @@ await page.waitForSelector('text=InFlight TV')
 await page.waitForSelector('.iftv-tabbar')
 await page.waitForSelector('input[placeholder="Search channels…"]')
 await page.waitForSelector('text=Seed CNN')
+await page.click('text=Movies')
+await page.waitForSelector('text=Seed Movie')
 await page.goto(`http://localhost:${port}/index.html#/accounts`)
 await page.waitForSelector('input[placeholder="Server URL (http://host:port)"]')
 await page.waitForSelector('text=M3U playlist (no login)')

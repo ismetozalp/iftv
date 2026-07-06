@@ -3,9 +3,11 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useLibraryStore } from '@/stores/library'
 import type { ContentItem } from '@/core/content/types'
+import type { Section } from '@/core/content/provider'
 import VirtualGrid from '@/components/VirtualGrid.vue'
-import ChannelCard from '@/components/ChannelCard.vue'
+import ContentCard from '@/components/ContentCard.vue'
 
+const props = defineProps<{ section: Section }>()
 const ws = useWorkspaceStore()
 const lib = useLibraryStore()
 
@@ -13,18 +15,25 @@ const selectedCat = ref<string | null>(null)
 const query = ref('')
 const results = ref<ContentItem[]>([])
 
+const gridDims = computed(() =>
+  props.section === 'live' ? { itemWidth: 180, itemHeight: 130 } : { itemWidth: 150, itemHeight: 230 },
+)
+const searchPlaceholder = computed(() =>
+  props.section === 'vod' ? 'Search movies…' : props.section === 'series' ? 'Search series…' : 'Search channels…',
+)
+
 let syncSeq = 0
-async function syncAccount() {
+async function sync() {
   const seq = ++syncSeq
   query.value = ''
   results.value = []
-  await lib.setContext(ws.activeAccount, 'live')
-  if (seq !== syncSeq) return // a newer account switch superseded this one
+  await lib.setContext(ws.activeAccount, props.section)
+  if (seq !== syncSeq) return
   selectedCat.value = lib.categories[0]?.id ?? null
   if (selectedCat.value) await lib.loadCategory(selectedCat.value)
 }
-onMounted(syncAccount)
-watch(() => ws.activeAccount?.id, syncAccount)
+onMounted(sync)
+watch(() => [ws.activeAccount?.id, props.section], sync)
 
 async function selectCat(id: string) {
   query.value = ''
@@ -47,7 +56,7 @@ const shown = computed<ContentItem[]>(() =>
 <template>
   <div class="iftv-live d-flex">
     <aside class="iftv-cats">
-      <input v-model="query" class="form-control form-control-sm mb-2" placeholder="Search channels…" />
+      <input v-model="query" class="form-control form-control-sm mb-2" :placeholder="searchPlaceholder" />
       <div v-if="lib.error" class="text-danger small">{{ lib.error }}</div>
       <ul class="list-group list-group-flush" :class="{ 'opacity-50': query.trim() }">
         <li
@@ -65,11 +74,11 @@ const shown = computed<ContentItem[]>(() =>
     <section class="iftv-grid-wrap flex-fill">
       <p v-if="lib.loading" class="text-muted p-2">Loading…</p>
       <p v-else-if="!shown.length" class="text-muted p-2">
-        {{ query.trim() ? 'No channels match.' : 'No channels here.' }}
+        {{ query.trim() ? 'Nothing matches.' : 'Nothing here.' }}
       </p>
-      <VirtualGrid v-else :items="shown">
+      <VirtualGrid v-else :items="shown" :item-width="gridDims.itemWidth" :item-height="gridDims.itemHeight">
         <template #default="{ item }">
-          <ChannelCard :channel="(item as ContentItem)" />
+          <ContentCard :item="(item as ContentItem)" />
         </template>
       </VirtualGrid>
     </section>
