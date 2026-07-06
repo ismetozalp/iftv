@@ -30,9 +30,9 @@ describe('buildRemuxArgs', () => {
     expect(args).not.toContain('event')
     expect(args).not.toContain('-re') // live source is already realtime
   })
-  it('VOD (live:false) = realtime-paced (-re) EVENT playlist keeping every segment (duration + seek, no delete)', () => {
-    const args = buildRemuxArgs({ ...base, live: false })
-    expect(args.join(' ')).toContain('-re -i') // paced to realtime, before the input
+  it('VOD (live:false) = burst-then-realtime EVENT playlist keeping every segment (duration + seek, no delete)', () => {
+    const args = buildRemuxArgs({ ...base, live: false, burstSeconds: 30 })
+    expect(args.join(' ')).toContain('-readrate 1 -readrate_initial_burst 30 -i') // burst then pace, before input
     expect(args.join(' ')).toContain('-hls_list_size 0')
     expect(args.join(' ')).toContain('-hls_playlist_type event')
     expect(args).not.toContain('delete_segments+append_list+omit_endlist')

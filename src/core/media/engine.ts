@@ -31,7 +31,7 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       // stalls on for many Xtream panels) and writes it into the FIFO; ffmpeg reads the FIFO — a
       // local input, so no redirect/HTTP quirks — and remuxes to HLS.
       const curl = deps.spawn(['curl', ...buildCurlArgs({ url: inputUrl, outPath: fifo, userAgent: STREAM_USER_AGENT })])
-      const ff = deps.spawn(['ffmpeg', ...buildRemuxArgs({ inputPath: fifo, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), live, liveWindow })])
+      const ff = deps.spawn(['ffmpeg', ...buildRemuxArgs({ inputPath: fifo, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), live, liveWindow, burstSeconds: bufferSeconds })])
       const stopAll = (problem: string) => {
         curl.close(problem)
         ff.close(problem)

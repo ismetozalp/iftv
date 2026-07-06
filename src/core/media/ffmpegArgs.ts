@@ -28,6 +28,7 @@ export interface RemuxArgsInput {
   segmentPath: string
   live?: boolean // true = rolling live window; false = VOD (keep every segment)
   liveWindow?: number // segments retained for live (sized from the buffer setting)
+  burstSeconds?: number // VOD: seconds to burst-read before pacing to realtime (fills the buffer)
 }
 
 // ffmpeg reads the local FIFO (no network — no redirect/HTTP quirks), remuxes video and
@@ -35,15 +36,16 @@ export interface RemuxArgsInput {
 // VOD (movie/episode, finite) = an EVENT playlist keeping ALL segments so hls.js knows the
 // duration, can seek, and never skips (ENDLIST is written when ffmpeg finishes).
 // (HEVC video needs a video transcode — deferred to Plan 3c.)
-export function buildRemuxArgs({ inputPath, playlistPath, segmentPath, live = true, liveWindow = 6 }: RemuxArgsInput): string[] {
+export function buildRemuxArgs({ inputPath, playlistPath, segmentPath, live = true, liveWindow = 6, burstSeconds = 30 }: RemuxArgsInput): string[] {
   const hls = live
     ? ['-hls_list_size', String(liveWindow), '-hls_flags', 'delete_segments+append_list+omit_endlist']
     : ['-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_flags', 'append_list']
   return [
     '-y',
-    // VOD: pace to realtime so ffmpeg (copy is far faster than realtime) can't race the file and
-    // push the "edge" minutes ahead of the playhead. Live is already realtime — no -re.
-    ...(live ? [] : ['-re']),
+    // VOD: burst the first `burstSeconds` (fills the player buffer for a smooth start), then pace to
+    // realtime so ffmpeg (copy is far faster than realtime) can't race the file and push the "edge"
+    // minutes ahead of the playhead. Live is already realtime — no rate limiting.
+    ...(live ? [] : ['-readrate', '1', '-readrate_initial_burst', String(burstSeconds)]),
     '-i', inputPath,
     '-c:v', 'copy',
     '-c:a', 'aac',

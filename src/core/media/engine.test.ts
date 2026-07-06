@@ -61,7 +61,7 @@ describe('createPlaybackEngine.start', () => {
     const dVod = deps()
     const sVod = await createPlaybackEngine(dVod).start(XT, movie)
     const ffVod = spawnArgs(dVod).find((a) => a[0] === 'ffmpeg')!.join(' ')
-    expect(ffVod).toContain('-re -i')
+    expect(ffVod).toContain('-readrate 1 -readrate_initial_burst 30 -i')
     expect(ffVod).toContain('-hls_playlist_type event')
     expect(ffVod).toContain('-hls_list_size 0')
     expect(ffVod).not.toContain('omit_endlist')
