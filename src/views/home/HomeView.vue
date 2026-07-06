@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { Section } from '@/core/content/provider'
 import BrowseView from '@/views/browse/BrowseView.vue'
+import PlayerView from '@/components/PlayerView.vue'
 
 const ws = useWorkspaceStore()
 const section = ref<Section>('live')
@@ -39,5 +40,6 @@ watch(() => ws.activeAccount?.id, () => {
       <h4>Welcome to InFlight TV</h4>
       <p class="text-muted">No account open. Go to <RouterLink to="/accounts">Accounts</RouterLink> to add or open one.</p>
     </div>
+    <PlayerView />
   </div>
 </template>

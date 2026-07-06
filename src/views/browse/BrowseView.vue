@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useLibraryStore } from '@/stores/library'
+import { usePlayerStore } from '@/stores/player'
 import type { ContentItem } from '@/core/content/types'
 import type { Section } from '@/core/content/provider'
 import VirtualGrid from '@/components/VirtualGrid.vue'
@@ -10,6 +11,10 @@ import ContentCard from '@/components/ContentCard.vue'
 const props = defineProps<{ section: Section }>()
 const ws = useWorkspaceStore()
 const lib = useLibraryStore()
+const player = usePlayerStore()
+function onPlay(item: ContentItem) {
+  if (item.kind === 'live' && ws.activeAccount) player.play(ws.activeAccount, item)
+}
 
 const selectedCat = ref<string | null>(null)
 const query = ref('')
@@ -78,7 +83,7 @@ const shown = computed<ContentItem[]>(() =>
       </p>
       <VirtualGrid v-else :items="shown" :item-width="gridDims.itemWidth" :item-height="gridDims.itemHeight">
         <template #default="{ item }">
-          <ContentCard :item="(item as ContentItem)" />
+          <ContentCard :item="(item as ContentItem)" @click="onPlay(item as ContentItem)" />
         </template>
       </VirtualGrid>
     </section>
