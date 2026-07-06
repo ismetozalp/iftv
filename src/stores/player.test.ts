@@ -129,4 +129,44 @@ describe('usePlayerStore', () => {
     expect(maxActive).toBe(1) // never two live sessions
     expect(p.startOffset).toBe(180) // latest wins
   })
+
+  it('play() during an in-flight seek never leaves two sessions alive (one connection) and the later play wins', async () => {
+    let active = 0
+    let maxActive = 0
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    const engine: PlaybackEngine = {
+      start: vi.fn(async () => {
+        active++; maxActive = Math.max(maxActive, active)
+        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => { active-- } }
+      }),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: () => gate }) // seek blocks in settle until released
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 }) // active=1
+    const seekP = p.seek(1200) // stops current, parks at the settle gate
+    await new Promise((r) => setTimeout(r, 0)) // let seek reach the gate
+    const playP = p.play(ACCT, { ...MOVIE, id: 'x:movie:22', streamId: '22' }, { durationSeconds: 100 })
+    release()
+    await Promise.all([seekP, playP])
+    expect(maxActive).toBe(1) // never two panel connections
+    expect(active).toBe(1) // exactly one session left (no leak)
+    expect(p.item?.id).toBe('x:movie:22') // the later play wins
+  })
+
+  it('stop() during an in-flight seek ends idle (not error)', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    const { engine } = engineWith()
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: () => gate })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    const seekP = p.seek(1200)
+    await new Promise((r) => setTimeout(r, 0))
+    const stopP = p.stop()
+    release()
+    await Promise.all([seekP, stopP])
+    expect(p.status).toBe('idle')
+    expect(p.session).toBeNull()
+  })
 })
