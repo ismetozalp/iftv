@@ -43,7 +43,13 @@ function onLoadedData() {
   clearWatchdog()
 }
 
-const isGpuTranscode = computed(() => player.currentCodec === 'nvenc') // reflect the ACTUAL codec (post-fallback)
+// Always-on status badge reflecting what the pipeline is actually doing (copy vs GPU/CPU transcode).
+// Transcoding is fully automatic (copy → GPU → CPU); there is no manual button.
+const transcodeBadge = computed(() => {
+  if (player.currentCodec === 'nvenc') return 'Transcoding · GPU'
+  if (player.currentCodec === 'x264') return 'Transcoding · CPU'
+  return 'No transcode needed'
+})
 
 function teardown() {
   clearWatchdog()
@@ -143,12 +149,7 @@ function onScrub(e: MouseEvent) {
   <div v-if="player.status !== 'idle'" class="iftv-player">
     <div class="iftv-player-bar">
       <span class="iftv-player-title text-truncate">{{ player.item?.name }}</span>
-      <span v-if="player.transcode" class="iftv-transcoding">Transcoding · {{ isGpuTranscode ? 'GPU' : 'CPU' }}</span>
-      <button
-        v-else-if="settings.transcodeMode !== 'off'"
-        class="btn btn-sm btn-light"
-        @click="player.retryWithTranscode()"
-      >⤵ Transcode</button>
+      <span v-if="player.status === 'playing'" class="iftv-transcoding">{{ transcodeBadge }}</span>
       <button class="btn btn-sm btn-light" @click="close">✕ Close</button>
     </div>
     <div class="iftv-player-body">
