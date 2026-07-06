@@ -4,6 +4,7 @@ import { RouterView } from 'vue-router'
 import AccountTabBar from '@/components/AccountTabBar.vue'
 import PlayerView from '@/components/PlayerView.vue'
 import MovieDetail from '@/views/detail/MovieDetail.vue'
+import SeriesDetail from '@/views/detail/SeriesDetail.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const ws = useWorkspaceStore()
@@ -20,6 +21,7 @@ onMounted(() => ws.init())
       <RouterView />
     </main>
     <MovieDetail />
+    <SeriesDetail />
     <PlayerView />
   </div>
 </template>

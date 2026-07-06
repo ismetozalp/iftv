@@ -18,6 +18,7 @@ function onPlay(item: ContentItem) {
   if (!ws.activeAccount) return
   if (item.kind === 'live') player.play(ws.activeAccount, item)
   else if (item.kind === 'movie') detail.openMovie(ws.activeAccount, item)
+  else if (item.kind === 'series') detail.openSeries(ws.activeAccount, item)
 }
 
 const selectedCat = ref<string | null>(null)

@@ -33,7 +33,7 @@ function close() {
 </script>
 
 <template>
-  <div v-if="detail.open && detail.movie" class="iftv-detail">
+  <div v-if="detail.open && detail.mode === 'movie' && detail.movie" class="iftv-detail">
     <div class="iftv-detail-card">
       <button class="btn btn-sm btn-light iftv-detail-close" @click="close">✕ Close</button>
       <div class="iftv-detail-body d-flex gap-3">
@@ -56,12 +56,12 @@ function close() {
       </div>
     </div>
   </div>
-  <div v-else-if="detail.loading" class="iftv-detail">
+  <div v-else-if="detail.loading && detail.mode === 'movie'" class="iftv-detail">
     <div class="iftv-detail-card">
       <p class="text-light p-3">Loading…</p>
     </div>
   </div>
-  <div v-else-if="detail.error" class="iftv-detail">
+  <div v-else-if="detail.error && detail.mode === 'movie'" class="iftv-detail">
     <div class="iftv-detail-card">
       <button class="btn btn-sm btn-light iftv-detail-close" @click="close">✕ Close</button>
       <p class="text-danger p-3">{{ detail.error }}</p>
