@@ -3,6 +3,7 @@ import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
 import type { PlaybackEngine, PlaybackSession } from '@/core/media/PlaybackEngine'
 import { createCockpitPlaybackEngine } from '@/adapters/cockpitPlayback'
+import { useSettingsStore } from '@/stores/settings'
 
 interface PlayerDeps { engine: PlaybackEngine }
 
@@ -29,7 +30,8 @@ export const usePlayerStore = defineStore('player', {
       this.item = item
       try {
         const engine = await this._engine()
-        this.session = await engine.start(account, item)
+        const bufferSeconds = useSettingsStore().bufferSeconds
+        this.session = await engine.start(account, item, { bufferSeconds })
         this.status = 'playing'
       } catch (e) {
         this.status = 'error'

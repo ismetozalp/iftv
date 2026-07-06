@@ -2,8 +2,10 @@
 import { ref, watch, onBeforeUnmount } from 'vue'
 import Hls from 'hls.js'
 import { usePlayerStore } from '@/stores/player'
+import { useSettingsStore } from '@/stores/settings'
 
 const player = usePlayerStore()
+const settings = useSettingsStore()
 const video = ref<HTMLVideoElement | null>(null)
 let hls: Hls | null = null
 
@@ -18,6 +20,7 @@ watch(
     if (!session || !video.value) return
     if (Hls.isSupported()) {
       const Loader = session.createLoader() as never
+      const bufferSeconds = settings.bufferSeconds || 30
       hls = new Hls({
         pLoader: Loader,
         fLoader: Loader,
@@ -25,7 +28,9 @@ watch(
         // live tuning so playback keeps following the rolling window instead of stalling ~10s in
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 20,
-        maxBufferLength: 30,
+        liveSyncDuration: bufferSeconds,
+        maxBufferLength: bufferSeconds,
+        backBufferLength: bufferSeconds,
         maxMaxBufferLength: 120,
         fragLoadingMaxRetry: 10,
         levelLoadingMaxRetry: 10,

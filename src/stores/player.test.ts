@@ -24,7 +24,7 @@ describe('usePlayerStore', () => {
     const p = usePlayerStore()
     p.$configure({ engine })
     await p.play(ACCT, item)
-    expect(engine.start).toHaveBeenCalledWith(ACCT, item)
+    expect(engine.start).toHaveBeenCalledWith(ACCT, item, { bufferSeconds: 30 })
     expect(p.status).toBe('playing')
     expect(p.item?.id).toBe('x:live:1')
     expect(p.session?.sourceUrl).toBe('iftv://s/index.m3u8')
