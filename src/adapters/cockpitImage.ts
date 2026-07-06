@@ -6,8 +6,28 @@ import cockpit from 'cockpit'
 // component a blob: URL sidesteps both. curl -sL follows redirects and handles http/https
 // transparently; the UA mirrors the one used for stream playback.
 export async function fetchImageBytes(url: string): Promise<Uint8Array> {
+  // The URL comes from the (semi-trusted) panel, so harden the curl call:
+  //  - require an http(s) URL → rejects file://, gopher://, etc. (no local-file read / scheme SSRF)
+  //  - pin curl to http/https on the request AND on redirects, and cap redirects (SSRF via redirect)
+  //  - pass `--` so a "-"-prefixed URL can't smuggle curl flags (argv flag injection)
+  // Residual: the panel could still point this at an internal http host; impact is limited since the
+  // bytes are only rendered as an image in the user's own session (not returned to the panel).
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('invalid image url')
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('unsupported image url scheme')
+  }
   return cockpit.spawn(
-    ['curl', '-sL', '--max-time', '15', '--user-agent', 'VLC/3.0.20 LibVLC/3.0.20', url],
+    [
+      'curl', '-sL',
+      '--proto', '=http,https', '--proto-redir', '=http,https', '--max-redirs', '5',
+      '--max-time', '15', '--user-agent', 'VLC/3.0.20 LibVLC/3.0.20',
+      '--', parsed.toString(),
+    ],
     { binary: true, err: 'message' },
   )
 }
