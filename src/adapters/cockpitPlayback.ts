@@ -6,8 +6,11 @@ import { cacheRoot } from '@/core/media/session'
 export async function createCockpitPlaybackEngine(): Promise<PlaybackEngine> {
   const user = await cockpit.user()
   const root = cacheRoot(user.home)
-  // Best-effort cleanup of stale session dirs from prior/crashed runs.
-  cockpit.spawn(['sh', '-c', `rm -rf ${root}/* 2>/dev/null || true`], { superuser: 'try' }).catch(() => {})
+  // Best-effort cleanup of stale session dirs from prior/crashed runs. Remove the whole
+  // cache root (a later session's `mkdir -p` recreates it). Pass the path as an argv element
+  // — no shell, so it can't be command-injected via an odd home dir — and AWAIT it so it
+  // can't race a subsequent session's mkdir.
+  await cockpit.spawn(['rm', '-rf', root]).catch(() => {})
 
   const deps: EngineDeps = {
     home: async () => user.home,
