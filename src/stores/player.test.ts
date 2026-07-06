@@ -86,6 +86,15 @@ describe('usePlayerStore', () => {
     expect(engine.start).toHaveBeenCalledWith(ACCT, MOVIE, expect.objectContaining({ startOffsetSeconds: 0 }))
   })
 
+  it('play() with startOffsetSeconds resumes from the saved offset', async () => {
+    const { engine } = engineWith()
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {} })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400, startOffsetSeconds: 300 })
+    expect(p.startOffset).toBe(300)
+    expect(engine.start).toHaveBeenCalledWith(ACCT, MOVIE, expect.objectContaining({ startOffsetSeconds: 300 }))
+  })
+
   it('seek() stops the current session BEFORE starting the next (one connection) and sets startOffset', async () => {
     const order: string[] = []
     const stop = vi.fn(async () => { order.push('stop') })

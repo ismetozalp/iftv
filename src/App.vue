@@ -8,13 +8,16 @@ import SeriesDetail from '@/views/detail/SeriesDetail.vue'
 import SettingsView from '@/views/settings/SettingsView.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useSettingsStore } from '@/stores/settings'
+import { useCollectionsStore } from '@/stores/collections'
 
 const ws = useWorkspaceStore()
 const settings = useSettingsStore()
+const collections = useCollectionsStore()
 const settingsOpen = ref(false)
 onMounted(() => {
   void ws.init()
   void settings.load()
+  void collections.load()
 })
 </script>
 

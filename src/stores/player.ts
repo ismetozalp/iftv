@@ -85,7 +85,7 @@ export const usePlayerStore = defineStore('player', {
         throw e
       }
     },
-    async play(account: Account, item: ContentItem, opts?: { durationSeconds?: number | null }) {
+    async play(account: Account, item: ContentItem, opts?: { durationSeconds?: number | null; startOffsetSeconds?: number }) {
       const gen = ++this._mx.gen
       await this._exclusive(async () => {
         if (gen !== this._mx.gen) return // superseded before we got the lock
@@ -95,7 +95,7 @@ export const usePlayerStore = defineStore('player', {
         this.item = item
         this.account = account
         this.duration = opts?.durationSeconds ?? null
-        this.startOffset = 0
+        this.startOffset = opts?.startOffsetSeconds ?? 0
         this.transcode = false
         this._forceSoftware = false
         this.currentCodec = 'copy'
@@ -120,7 +120,7 @@ export const usePlayerStore = defineStore('player', {
             } catch { /* discovery is best-effort — start playback regardless */ }
             if (gen !== this._mx.gen) return // superseded during discovery
           }
-          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: 0, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: this.startOffset, videoCodec: this._resolveVideoCodec(), audioIndex: this.selectedAudio, subtitleIndex: this.selectedSubtitle })
           if (gen !== this._mx.gen) { await session.stop(); return } // superseded while starting
           this.session = session
           this.currentCodec = this._resolveVideoCodec()

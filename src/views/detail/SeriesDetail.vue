@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useDetailStore } from '@/stores/detail'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { usePlayerStore } from '@/stores/player'
+import { useCollectionsStore } from '@/stores/collections'
 import type { ContentItem } from '@/core/content/types'
 import type { Episode } from '@/core/xtream/seriesInfo'
 import { useProxiedImage } from '@/composables/useProxiedImage'
@@ -10,7 +11,59 @@ import { useProxiedImage } from '@/composables/useProxiedImage'
 const detail = useDetailStore()
 const ws = useWorkspaceStore()
 const player = usePlayerStore()
+const collections = useCollectionsStore()
 const { url: coverUrl, failed: coverFailed } = useProxiedImage(() => detail.series?.cover)
+
+const isFav = computed(() => {
+  const account = ws.activeAccount
+  const item = detail.item
+  return !!account && !!item && collections.isFavorite(account.id, item.id)
+})
+const lists = computed(() => {
+  const account = ws.activeAccount
+  return account ? collections.listsOf(account.id) : []
+})
+
+function toggleFavorite() {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  void collections.toggleFavorite(account, item)
+}
+function addToWatchLater() {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  void collections.addWatchLater(account, item)
+}
+function addToExistingList(listId: string) {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  void collections.addToList(listId, account, item)
+  listMenuOpen.value = false
+}
+async function addToNewList() {
+  const account = ws.activeAccount
+  const item = detail.item
+  if (!account || !item) return
+  const name = window.prompt('New list name')
+  if (!name || !name.trim()) return
+  await collections.createList(name.trim())
+  const created = collections.listsOf(account.id)[0]
+  if (created) await collections.addToList(created.id, account, item)
+  listMenuOpen.value = false
+}
+
+const listMenuOpen = ref(false)
+function toggleListMenu() {
+  listMenuOpen.value = !listMenuOpen.value
+}
+function onDocClick() {
+  listMenuOpen.value = false
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 const selectedSeason = ref<number | null>(null)
 watch(
@@ -68,6 +121,38 @@ function close() {
           <p v-if="detail.series.genre" class="text-muted small mb-2">{{ detail.series.genre }}</p>
           <p v-if="detail.series.plot">{{ detail.series.plot }}</p>
           <p v-if="detail.series.cast" class="small"><strong>Cast:</strong> {{ detail.series.cast }}</p>
+
+          <div class="d-flex gap-2 mb-2 flex-wrap align-items-start">
+            <button
+              v-if="ws.activeAccount"
+              type="button"
+              class="btn btn-sm btn-outline-light"
+              :class="{ active: isFav }"
+              @click="toggleFavorite"
+            >
+              <span v-if="isFav">★ Favorited</span>
+              <span v-else>☆ Favorite</span>
+            </button>
+            <button v-if="ws.activeAccount" type="button" class="btn btn-sm btn-outline-light" @click="addToWatchLater">
+              ＋ Watch Later
+            </button>
+            <div v-if="ws.activeAccount" class="dropdown" @click.stop>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-light dropdown-toggle"
+                aria-expanded="false"
+                @click.stop="toggleListMenu"
+              >
+                ＋ Add to list
+              </button>
+              <ul v-if="listMenuOpen" class="dropdown-menu show">
+                <li v-for="l in lists" :key="l.id">
+                  <button type="button" class="dropdown-item" @click="addToExistingList(l.id)">{{ l.name }}</button>
+                </li>
+                <li><button type="button" class="dropdown-item" @click="addToNewList">New list…</button></li>
+              </ul>
+            </div>
+          </div>
 
           <div v-if="detail.series.seasons.length" class="btn-group btn-group-sm mb-2" role="group">
             <button
