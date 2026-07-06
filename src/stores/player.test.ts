@@ -252,4 +252,47 @@ describe('usePlayerStore', () => {
     expect(p.status).toBe('playing')
     expect(p.transcode).toBe(true)
   })
+
+  it('fallbackToSoftware restarts ONCE on x264 when the active session is nvenc, at the same offset', async () => {
+    const starts: string[] = []
+    const engine: PlaybackEngine = {
+      start: vi.fn(async (_a, _i, o) => { starts.push(o?.videoCodec); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} } }),
+    }
+    const p = usePlayerStore(); p.$configure({ engine, sleep: async () => {} })
+    useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.seek(1200)
+    await p.retryWithTranscode()
+    expect(p.currentCodec).toBe('nvenc')
+    starts.length = 0
+    await p.fallbackToSoftware()
+    expect(starts).toEqual(['x264'])
+    expect(p.currentCodec).toBe('x264')
+    expect(p.transcode).toBe(true)
+    expect(p.startOffset).toBe(1200)
+  })
+
+  it('a mid-stream nvenc failure sticks to software for later seeks', async () => {
+    const starts: string[] = []
+    const engine: PlaybackEngine = {
+      start: vi.fn(async (_a, _i, o) => { starts.push(o?.videoCodec); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} } }),
+    }
+    const p = usePlayerStore(); p.$configure({ engine, sleep: async () => {} })
+    useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.retryWithTranscode() // nvenc
+    await p.fallbackToSoftware() // → x264 (sticky)
+    starts.length = 0
+    await p.seek(600)
+    expect(starts).toEqual(['x264']) // seek stays on software, doesn't re-try nvenc
+  })
+
+  it('fallbackToSoftware is a no-op when not transcoding on nvenc', async () => {
+    const { engine } = engineWith()
+    const p = usePlayerStore(); p.$configure({ engine, sleep: async () => {} })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 }) // copy
+    ;(engine.start as ReturnType<typeof vi.fn>).mockClear()
+    await p.fallbackToSoftware()
+    expect(engine.start).not.toHaveBeenCalled()
+  })
 })

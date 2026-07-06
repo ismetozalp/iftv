@@ -19,7 +19,8 @@ let hls: Hls | null = null
 // Undecodable-video detection: hls.js may report a codec/decode error, or (rarely) never report
 // one while audio keeps advancing and the video track just never paints. Either path retries
 // ONCE per session with a forced transcode (see player.retryWithTranscode).
-let triedTranscode = false
+let triedTranscode = false // copy → transcode, once per session
+let triedSoftwareFallback = false // nvenc → x264, once per session
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearWatchdog() {
@@ -31,12 +32,11 @@ function armWatchdog() {
   watchdogTimer = setTimeout(() => {
     watchdogTimer = null
     const v = video.value
-    if (!v || player.transcode || triedTranscode) return
+    if (!v) return
     const hasVideoTrack = hls?.levels?.some((l) => l.videoCodec) ?? false
-    if (hasVideoTrack && v.currentTime > 0 && v.videoWidth === 0) {
-      triedTranscode = true
-      void player.retryWithTranscode()
-    }
+    if (!(hasVideoTrack && v.currentTime > 0 && v.videoWidth === 0)) return // audio-only or decoding fine
+    if (!player.transcode && !triedTranscode) { triedTranscode = true; void player.retryWithTranscode() }
+    else if (player.transcode && player.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware() }
   }, 6000)
 }
 
@@ -60,6 +60,7 @@ watch(
   (session) => {
     teardown()
     triedTranscode = false
+    triedSoftwareFallback = false
     if (!session || !video.value) return
     if (Hls.isSupported()) {
       const Loader = session.createLoader() as never
@@ -88,12 +89,13 @@ watch(
         // Recover from transient live errors rather than killing the whole session.
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls?.startLoad(); return }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries++ < 3) { hls?.recoverMediaError(); return }
-        // Decode/codec-class failure (or a media error that outlived recovery) — the browser
-        // can't decode this stream as-is. Force a transcode instead of failing, once per session.
-        if (!player.transcode && !triedTranscode && (codecErrorDetails.has(data.details) || data.type === Hls.ErrorTypes.MEDIA_ERROR)) {
-          triedTranscode = true
-          void player.retryWithTranscode()
-          return
+        // Decode/codec-class failure (or a media error that outlived recovery). Escalate once:
+        // not transcoding yet → transcode (copy can't be decoded, e.g. HEVC); already on nvenc →
+        // drop to software (x264). x264 is the last resort → then surface the error.
+        const undecodable = codecErrorDetails.has(data.details) || data.type === Hls.ErrorTypes.MEDIA_ERROR
+        if (undecodable) {
+          if (!player.transcode && !triedTranscode) { triedTranscode = true; void player.retryWithTranscode(); return }
+          if (player.transcode && player.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware(); return }
         }
         teardown()
         void player.fail(`Playback error: ${data.details}`)
