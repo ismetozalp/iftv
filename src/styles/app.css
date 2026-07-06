@@ -48,6 +48,31 @@ body { margin: 0; }
 .iftv-cw-progress-bar { height: 100%; background: #0d6efd; }
 .iftv-history-list { max-height: 100%; }
 
+.iftv-guide-body { min-height: 0; border: 1px solid var(--bs-border-color); border-radius: 4px; overflow: hidden; }
+.iftv-guide-names { width: 180px; flex: 0 0 180px; overflow-y: auto; overflow-x: hidden; border-right: 1px solid var(--bs-border-color); }
+.iftv-guide-names-header { height: 28px; border-bottom: 1px solid var(--bs-border-color); position: sticky; top: 0; background: var(--bs-body-bg); z-index: 2; }
+.iftv-guide-names-inner { position: relative; }
+.iftv-guide-name-cell {
+  position: absolute; top: 0; left: 0; right: 0; height: 56px; display: flex; align-items: center;
+  padding: 0 0.5rem; border-bottom: 1px solid var(--bs-border-color); font-size: 0.85rem;
+}
+.iftv-guide-grid { flex: 1; min-width: 0; overflow: auto; position: relative; }
+.iftv-guide-header { position: sticky; top: 0; height: 28px; background: var(--bs-body-bg); z-index: 2; border-bottom: 1px solid var(--bs-border-color); }
+.iftv-guide-tick {
+  position: absolute; top: 0; height: 100%; display: flex; align-items: center; font-size: 0.7rem;
+  color: var(--bs-secondary); border-left: 1px solid var(--bs-border-color); padding-left: 2px; white-space: nowrap;
+}
+.iftv-guide-rows { position: relative; }
+.iftv-guide-row { position: absolute; left: 0; right: 0; height: 56px; border-bottom: 1px solid var(--bs-border-color); }
+.iftv-guide-block {
+  position: absolute; top: 4px; bottom: 4px; background: #0d6efd; color: #fff; font-size: 0.75rem;
+  padding: 2px 6px; border-radius: 4px; cursor: pointer; overflow: hidden; white-space: nowrap;
+}
+.iftv-guide-block:hover { background: #0b5ed7; }
+.iftv-guide-now-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; z-index: 3; pointer-events: none; }
+.iftv-guide-popover { position: fixed; inset: 0; z-index: 1040; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.iftv-guide-popover-card { background: #1a1a1a; color: #fff; border-radius: 8px; padding: 1rem; max-width: 420px; width: 100%; }
+
 .iftv-player { position: fixed; inset: 0; z-index: 1050; background: #000; display: flex; flex-direction: column; }
 .iftv-player-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem; background: #111; color: #fff; }
 .iftv-player-title { flex: 1; font-weight: 600; }

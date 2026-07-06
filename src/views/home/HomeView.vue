@@ -4,10 +4,11 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import type { Section } from '@/core/content/provider'
 import BrowseView from '@/views/browse/BrowseView.vue'
 import LibraryView from '@/views/library/LibraryView.vue'
+import GuideView from '@/views/guide/GuideView.vue'
 
 const ws = useWorkspaceStore()
 const section = ref<Section>('live')
-const view = ref<'browse' | 'library'>('browse')
+const view = ref<'browse' | 'library' | 'guide'>('browse')
 
 // M3U accounts only have live; force back to live when the active account is m3u.
 const sections = computed<{ id: Section; label: string }[]>(() =>
@@ -48,9 +49,18 @@ function selectSection(id: Section) {
         >
           ★ Library
         </button>
+        <button
+          type="button"
+          class="btn"
+          :class="view === 'guide' ? 'btn-primary' : 'btn-outline-primary'"
+          @click="view = 'guide'"
+        >
+          📺 Guide
+        </button>
       </nav>
       <BrowseView v-if="view === 'browse'" :section="section" class="flex-fill" />
-      <LibraryView v-else class="flex-fill" />
+      <LibraryView v-else-if="view === 'library'" class="flex-fill" />
+      <GuideView v-else class="flex-fill" />
     </template>
     <div v-else>
       <h4>Welcome to InFlight TV</h4>

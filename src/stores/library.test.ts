@@ -86,4 +86,22 @@ describe('useLibraryStore', () => {
     await s.setContext(ACCT, 'live')
     expect(s.error).toMatch(/boom/)
   })
+
+  it('allLiveItems fetches all live channels for the account via the "live" section provider, independent of setContext state', async () => {
+    const s = useLibraryStore()
+    let seenSection: string | null = null
+    s.$configure({
+      makeProvider: (_account, section) => {
+        seenSection = section
+        return fakeProvider()
+      },
+    })
+    // Not in "live" context — allLiveItems must still force the live section and must not
+    // disturb the browse-context state (categories/itemsByCat/accountId).
+    await s.setContext(ACCT, 'vod')
+    const items = await s.allLiveItems(ACCT)
+    expect(items.map((c) => c.name)).toEqual(['CNN', 'BBC News', 'ESPN'])
+    expect(seenSection).toBe('live')
+    expect(s.section).toBe('vod')
+  })
 })
