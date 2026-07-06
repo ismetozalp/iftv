@@ -3,8 +3,10 @@ import { buildLiveArgs } from './ffmpegArgs'
 
 describe('buildLiveArgs', () => {
   const args = buildLiveArgs({ inputUrl: 'http://h/live/u/p/1.ts', playlistPath: '/c/s/index.m3u8', segmentPath: '/c/s/seg_%05d.ts' })
-  it('reconnects, remuxes video, transcodes audio to aac', () => {
+  it('reconnects, disables http keep-alive, remuxes video, transcodes audio to aac', () => {
     expect(args).toContain('-reconnect'); expect(args).toContain('-reconnect_streamed')
+    expect(args.join(' ')).toContain('-http_persistent 0') // CDN/HLS segment-fetch robustness (before -i)
+    expect(args.indexOf('-http_persistent')).toBeLessThan(args.indexOf('-i')) // input option
     expect(args.join(' ')).toContain('-c:v copy')
     expect(args.join(' ')).toContain('-c:a aac')
   })

@@ -9,6 +9,9 @@ export interface LiveArgsInput {
 export function buildLiveArgs({ inputUrl, playlistPath, segmentPath }: LiveArgsInput): string[] {
   return [
     '-y',
+    // Disable HTTP keep-alive: some CDNs (and nested HLS/M3U upstreams) fail segment
+    // fetches with persistent connections; harmless for a direct MPEG-TS input.
+    '-http_persistent', '0',
     '-reconnect', '1',
     '-reconnect_streamed', '1',
     '-reconnect_at_eof', '1',
