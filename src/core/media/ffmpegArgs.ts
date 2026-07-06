@@ -47,10 +47,12 @@ export interface LiveRemuxArgsInput {
   subtitlePath?: string | null // where to write the WebVTT subtitle output (required when subtitleIndex is set)
 }
 
-// Maps the first video stream + the chosen audio stream. Kept explicit (rather than ffmpeg's
-// default stream selection) so audioIndex actually picks the track the user asked for.
+// Maps the first video stream + the chosen audio stream. Explicit (rather than ffmpeg's default
+// selection) so audioIndex actually picks the track the user asked for, and `0:v:0` skips embedded
+// image/poster streams. The trailing `?` makes each map OPTIONAL, so audio-only (radio) channels —
+// which have no video — and the rare video-only stream still play instead of erroring out.
 export function mapArgs(audioIndex: number): string[] {
-  return ['-map', '0:v:0', '-map', `0:a:${audioIndex}`]
+  return ['-map', '0:v:0?', '-map', `0:a:${audioIndex}?`]
 }
 
 // A second ffmpeg output: burns the chosen subtitle stream to a standalone WebVTT file (read

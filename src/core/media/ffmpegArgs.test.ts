@@ -86,7 +86,7 @@ describe('videoCodecArgs', () => {
 
 describe('mapArgs + subtitleOutputArgs', () => {
   it('mapArgs maps first video + the chosen audio', () => {
-    expect(mapArgs(1)).toEqual(['-map', '0:v:0', '-map', '0:a:1'])
+    expect(mapArgs(1)).toEqual(['-map', '0:v:0?', '-map', '0:a:1?'])
   })
   it('subtitleOutputArgs emits a webvtt output only when a subtitle is chosen', () => {
     expect(subtitleOutputArgs(null, null)).toEqual([])
@@ -94,14 +94,14 @@ describe('mapArgs + subtitleOutputArgs', () => {
   })
   it('builders insert the audio map and append the subtitle output', () => {
     const a = buildVodRemuxArgs({ inputUrl: 'http://h/m.mkv', offsetSeconds: 0, burstSeconds: 30, playlistPath: '/c/i.m3u8', segmentPath: '/c/s.ts', audioIndex: 1, subtitleIndex: 0, subtitlePath: '/c/sub.vtt' }).join(' ')
-    expect(a).toContain('-map 0:v:0 -map 0:a:1')
+    expect(a).toContain('-map 0:v:0? -map 0:a:1?')
     expect(a.indexOf('-map 0:a:1')).toBeLessThan(a.indexOf('-c:v')) // maps before codec
     expect(a).toContain('-map 0:s:0 -c:s webvtt -f webvtt /c/sub.vtt')
     expect(a.indexOf('/c/i.m3u8')).toBeLessThan(a.indexOf('-map 0:s:0')) // sub output AFTER the playlist
   })
   it('no maps change / no sub output by default', () => {
     const a = buildVodRemuxArgs({ inputUrl: 'u', offsetSeconds: 0, burstSeconds: 30, playlistPath: 'p', segmentPath: 's' }).join(' ')
-    expect(a).toContain('-map 0:v:0 -map 0:a:0'); expect(a).not.toContain('-c:s webvtt')
+    expect(a).toContain('-map 0:v:0? -map 0:a:0?'); expect(a).not.toContain('-c:s webvtt')
   })
 })
 
