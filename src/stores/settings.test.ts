@@ -243,4 +243,16 @@ describe('useSettingsStore', () => {
     expect(r).toEqual({ ok: false, error: 'Directory is not writable' })
     expect(s.cacheDir).toBe('')
   })
+
+  it('setCacheDir rejects a relative path without probing (must be absolute)', async () => {
+    const store = createMemoryStore()
+    let probed = false
+    const s = useSettingsStore()
+    s.$configure({ store, probeWritable: async () => { probed = true; return true } })
+    await s.load()
+    const r = await s.setCacheDir('..')
+    expect(r.ok).toBe(false)
+    expect(probed).toBe(false) // rejected before touching the filesystem
+    expect(s.cacheDir).toBe('')
+  })
 })

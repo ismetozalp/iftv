@@ -101,6 +101,7 @@ export const useSettingsStore = defineStore('settings', {
     async setCacheDir(dir: string): Promise<{ ok: boolean; error?: string }> {
       const d = dir.trim()
       if (d) {
+        if (!d.startsWith('/')) return { ok: false, error: 'Use an absolute path (starting with /)' }
         const { probeWritable } = await this._host()
         const ok = await (probeWritable ?? cockpitProbeWritable)(d)
         if (!ok) return { ok: false, error: 'Directory is not writable' }

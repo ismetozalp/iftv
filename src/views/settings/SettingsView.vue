@@ -41,6 +41,10 @@ function formatBytes(n: number): string {
 }
 
 async function refreshCache() {
+  // Sync the input from the (possibly async-loaded) store each time the panel opens — the ref's
+  // initial value is snapshotted at app boot, before settings.load() resolves, so without this a
+  // saved custom dir would show blank and Save would silently revert it to default.
+  cacheDirInput.value = settings.cacheDir
   const home = (await cockpit.user()).home
   defaultRoot.value = `${home}/.cache/inflighttv`
   resolvedRoot.value = resolveCacheRoot(home, settings.cacheDir)
