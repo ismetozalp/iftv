@@ -23,14 +23,16 @@ describe('buildRemuxArgs', () => {
     expect(args).toContain('-hls_segment_filename'); expect(args).toContain('/c/s/seg_%05d.ts')
     expect(args[args.length - 1]).toBe('/c/s/index.m3u8')
   })
-  it('LIVE (default) = a rolling window: delete old segments, no ENDLIST, sized by liveWindow', () => {
+  it('LIVE (default) = a rolling window: delete old segments, no ENDLIST, sized by liveWindow, no -re', () => {
     const args = buildRemuxArgs({ ...base, live: true, liveWindow: 10 })
     expect(args).toContain('-hls_list_size'); expect(args).toContain('10')
     expect(args).toContain('delete_segments+append_list+omit_endlist')
     expect(args).not.toContain('event')
+    expect(args).not.toContain('-re') // live source is already realtime
   })
-  it('VOD (live:false) = keep every segment as an EVENT playlist (duration + seek, no delete)', () => {
+  it('VOD (live:false) = realtime-paced (-re) EVENT playlist keeping every segment (duration + seek, no delete)', () => {
     const args = buildRemuxArgs({ ...base, live: false })
+    expect(args.join(' ')).toContain('-re -i') // paced to realtime, before the input
     expect(args.join(' ')).toContain('-hls_list_size 0')
     expect(args.join(' ')).toContain('-hls_playlist_type event')
     expect(args).not.toContain('delete_segments+append_list+omit_endlist')

@@ -41,6 +41,9 @@ export function buildRemuxArgs({ inputPath, playlistPath, segmentPath, live = tr
     : ['-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_flags', 'append_list']
   return [
     '-y',
+    // VOD: pace to realtime so ffmpeg (copy is far faster than realtime) can't race the file and
+    // push the "edge" minutes ahead of the playhead. Live is already realtime — no -re.
+    ...(live ? [] : ['-re']),
     '-i', inputPath,
     '-c:v', 'copy',
     '-c:a', 'aac',

@@ -53,6 +53,7 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       const Loader = createCockpitLoaderClass((p) => deps.readFile(p), (url) => resolveInDir(dir, url))
       return {
         sourceUrl: sourceUrl(id),
+        isLive: live,
         createLoader: () => Loader,
         async stop() {
           stopAll('terminated')

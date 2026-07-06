@@ -11,7 +11,7 @@ const item: ContentItem = { id: 'x:live:1', kind: 'live', name: 'CNN', logo: '',
 function engineWith(session: Partial<PlaybackSession> = {}): { engine: PlaybackEngine; stop: ReturnType<typeof vi.fn> } {
   const stop = vi.fn(async () => {})
   const engine: PlaybackEngine = {
-    start: vi.fn(async () => ({ sourceUrl: 'iftv://s/index.m3u8', createLoader: () => class {}, stop, ...session })),
+    start: vi.fn(async () => ({ sourceUrl: 'iftv://s/index.m3u8', isLive: true, createLoader: () => class {}, stop, ...session })),
   }
   return { engine, stop }
 }

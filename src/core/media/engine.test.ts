@@ -48,20 +48,24 @@ describe('createPlaybackEngine.start', () => {
     expect(typeof s.createLoader()).toBe('function')
   })
 
-  it('uses a rolling live window for live, and a keep-all VOD event playlist for a movie', async () => {
+  it('uses a rolling live window for live, and a realtime-paced keep-all VOD event playlist for a movie', async () => {
     const dLive = deps()
-    await createPlaybackEngine(dLive).start(XT, item) // kind: 'live'
+    const sLive = await createPlaybackEngine(dLive).start(XT, item) // kind: 'live'
     const ffLive = spawnArgs(dLive).find((a) => a[0] === 'ffmpeg')!.join(' ')
     expect(ffLive).toContain('delete_segments+append_list+omit_endlist')
     expect(ffLive).not.toContain('event')
+    expect(ffLive).not.toContain('-re')
+    expect(sLive.isLive).toBe(true)
 
     const movie = { ...item, id: 'x:movie:9', kind: 'movie' as const, streamId: '9', containerExtension: 'mkv' }
     const dVod = deps()
-    await createPlaybackEngine(dVod).start(XT, movie)
+    const sVod = await createPlaybackEngine(dVod).start(XT, movie)
     const ffVod = spawnArgs(dVod).find((a) => a[0] === 'ffmpeg')!.join(' ')
+    expect(ffVod).toContain('-re -i')
     expect(ffVod).toContain('-hls_playlist_type event')
     expect(ffVod).toContain('-hls_list_size 0')
     expect(ffVod).not.toContain('omit_endlist')
+    expect(sVod.isLive).toBe(false)
   })
 
   it('waits (polls) for the playlist to appear before returning', async () => {

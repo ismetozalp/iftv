@@ -37,6 +37,8 @@ watch(
         maxMaxBufferLength: Math.max(120, bufferSeconds * 2),
         fragLoadingMaxRetry: 10,
         levelLoadingMaxRetry: 10,
+        // VOD (movie/episode): start at the very beginning. Live: -1 = start at the live edge.
+        startPosition: session.isLive ? -1 : 0,
       })
       let mediaRecoveries = 0
       hls.on(Hls.Events.ERROR, (_e, data) => {

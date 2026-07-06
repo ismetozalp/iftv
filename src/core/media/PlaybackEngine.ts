@@ -3,6 +3,7 @@ import type { ContentItem } from '@/core/content/types'
 
 export interface PlaybackSession {
   sourceUrl: string // pass to hls.loadSource
+  isLive: boolean // live = start at the edge; VOD = start at position 0
   createLoader(): unknown // loader class for Hls { pLoader, fLoader }
   stop(): Promise<void>
 }
