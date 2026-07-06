@@ -8,7 +8,7 @@ export interface PlaybackSession {
 }
 
 export interface PlaybackEngine {
-  start(account: Account, item: ContentItem): Promise<PlaybackSession>
+  start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number }): Promise<PlaybackSession>
 }
 
 export interface FfmpegProc {

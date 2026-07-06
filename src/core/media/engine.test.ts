@@ -48,6 +48,22 @@ describe('createPlaybackEngine.start', () => {
     expect(typeof s.createLoader()).toBe('function')
   })
 
+  it('uses a rolling live window for live, and a keep-all VOD event playlist for a movie', async () => {
+    const dLive = deps()
+    await createPlaybackEngine(dLive).start(XT, item) // kind: 'live'
+    const ffLive = spawnArgs(dLive).find((a) => a[0] === 'ffmpeg')!.join(' ')
+    expect(ffLive).toContain('delete_segments+append_list+omit_endlist')
+    expect(ffLive).not.toContain('event')
+
+    const movie = { ...item, id: 'x:movie:9', kind: 'movie' as const, streamId: '9', containerExtension: 'mkv' }
+    const dVod = deps()
+    await createPlaybackEngine(dVod).start(XT, movie)
+    const ffVod = spawnArgs(dVod).find((a) => a[0] === 'ffmpeg')!.join(' ')
+    expect(ffVod).toContain('-hls_playlist_type event')
+    expect(ffVod).toContain('-hls_list_size 0')
+    expect(ffVod).not.toContain('omit_endlist')
+  })
+
   it('waits (polls) for the playlist to appear before returning', async () => {
     let n = 0
     const d = deps({ readFile: vi.fn(async () => (++n < 3 ? null : new TextEncoder().encode('#EXTM3U'))) })

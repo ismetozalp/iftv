@@ -26,12 +26,19 @@ export interface RemuxArgsInput {
   inputPath: string // local FIFO fed by curl
   playlistPath: string
   segmentPath: string
+  live?: boolean // true = rolling live window; false = VOD (keep every segment)
+  liveWindow?: number // segments retained for live (sized from the buffer setting)
 }
 
 // ffmpeg reads the local FIFO (no network — no redirect/HTTP quirks), remuxes video and
-// transcodes audio to AAC into a rolling live HLS window.
-// (HEVC video needs a video transcode — deferred to Plan 3b.)
-export function buildRemuxArgs({ inputPath, playlistPath, segmentPath }: RemuxArgsInput): string[] {
+// transcodes audio to AAC into HLS. LIVE = a rolling window (old segments deleted, no ENDLIST).
+// VOD (movie/episode, finite) = an EVENT playlist keeping ALL segments so hls.js knows the
+// duration, can seek, and never skips (ENDLIST is written when ffmpeg finishes).
+// (HEVC video needs a video transcode — deferred to Plan 3c.)
+export function buildRemuxArgs({ inputPath, playlistPath, segmentPath, live = true, liveWindow = 6 }: RemuxArgsInput): string[] {
+  const hls = live
+    ? ['-hls_list_size', String(liveWindow), '-hls_flags', 'delete_segments+append_list+omit_endlist']
+    : ['-hls_list_size', '0', '-hls_playlist_type', 'event', '-hls_flags', 'append_list']
   return [
     '-y',
     '-i', inputPath,
@@ -40,8 +47,7 @@ export function buildRemuxArgs({ inputPath, playlistPath, segmentPath }: RemuxAr
     '-b:a', '128k',
     '-f', 'hls',
     '-hls_time', '4',
-    '-hls_list_size', '6',
-    '-hls_flags', 'delete_segments+append_list+omit_endlist',
+    ...hls,
     '-hls_segment_type', 'mpegts',
     '-hls_segment_filename', segmentPath,
     playlistPath,
