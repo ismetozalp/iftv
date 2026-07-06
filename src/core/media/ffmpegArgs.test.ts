@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildCurlArgs, buildLiveRemuxArgs, buildVodRemuxArgs, STREAM_USER_AGENT } from './ffmpegArgs'
+import { buildCurlArgs, buildLiveRemuxArgs, buildVodRemuxArgs, videoCodecArgs, STREAM_USER_AGENT } from './ffmpegArgs'
 
 describe('buildCurlArgs', () => {
   const args = buildCurlArgs({ url: 'http://h/live/u/p/1.ts', outPath: '/c/s/in.ts', userAgent: STREAM_USER_AGENT })
@@ -52,5 +52,26 @@ describe('buildVodRemuxArgs', () => {
   })
   it('offset 0 still emits -ss 0', () => {
     expect(buildVodRemuxArgs({ inputUrl: 'u', offsetSeconds: 0, burstSeconds: 30, playlistPath: 'p', segmentPath: 's' }).join(' ')).toContain('-ss 0')
+  })
+})
+
+describe('videoCodecArgs', () => {
+  it('maps codecs', () => {
+    expect(videoCodecArgs('copy')).toEqual(['-c:v', 'copy'])
+    expect(videoCodecArgs('nvenc').join(' ')).toBe('-c:v h264_nvenc -preset p4 -tune ll -b:v 0 -cq 23')
+    expect(videoCodecArgs('x264').join(' ')).toBe('-c:v libx264 -preset veryfast -tune zerolatency -crf 23')
+  })
+})
+
+describe('builders honor videoCodec', () => {
+  const live = { inputPath: '/c/in.ts', liveWindow: 6, playlistPath: '/c/i.m3u8', segmentPath: '/c/s_%05d.ts' }
+  it('live default is copy; nvenc swaps it', () => {
+    expect(buildLiveRemuxArgs(live).join(' ')).toContain('-c:v copy')
+    expect(buildLiveRemuxArgs({ ...live, videoCodec: 'nvenc' }).join(' ')).toContain('-c:v h264_nvenc')
+    expect(buildLiveRemuxArgs({ ...live, videoCodec: 'nvenc' }).join(' ')).not.toContain('-c:v copy')
+  })
+  it('vod honors x264 and keeps -ss + event', () => {
+    const a = buildVodRemuxArgs({ inputUrl: 'http://h/m.mkv', offsetSeconds: 60, burstSeconds: 30, playlistPath: '/c/i.m3u8', segmentPath: '/c/s.ts', videoCodec: 'x264' }).join(' ')
+    expect(a).toContain('-c:v libx264'); expect(a).toContain('-ss 60'); expect(a).toContain('-hls_playlist_type event')
   })
 })
