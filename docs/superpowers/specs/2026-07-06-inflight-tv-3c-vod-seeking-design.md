@@ -22,21 +22,16 @@ Hardware-accelerated transcoding + device selection, subtitle/audio-track select
 
 ## Architecture
 
-### 1. De-risk spike (build step 1)
-Before building UI, verify on the user's real panel (via `dev/e2e-playback.mjs` / a shell spike, one connection): resolve a movie's 302 to its final CDN URL, then `ffmpeg -ss <T> -i <resolved-url> -c:v copy -c:a aac …` and confirm it (a) does **not** stall (direct URL, no redirect) and (b) seeks efficiently to `T` (HTTP range) rather than reading from the start. If the panel's movie files are **not** range-seekable, fall back to the "download whole movie" approach for those items and record it. Everything below assumes the spike passes.
+### 1. De-risk spike — DONE (2026-07-06, on the real panel, one connection)
+Result: movie files return **HTTP 206 to a Range GET** (range-seekable) and **do not cross-host redirect** (unlike live). `ffmpeg -ss 300 -i <movieUrl>` directly produced segments in ~3s with no stall and an efficient range-seek. **Consequence: no redirect-resolution and no curl/FIFO are needed for VOD** — ffmpeg reads the panel movie URL directly.
 
-### 2. Redirect resolution (`src/core/media/…` + adapter)
-A small step that turns a panel URL into its final URL by following the 302 **without** downloading the body (`curl -sIL -o /dev/null -w '%{url_effective}'` or equivalent), returning the effective URL. Pure core takes the raw output → effective URL; the adapter runs curl via `cockpit.spawn`. This is one brief panel hit (not a held connection).
+### 2. (removed) Redirect resolution
+Not needed — the spike showed movies don't redirect. Should a future panel redirect movies (ffmpeg stalls), revisit with a resolve-first step; not built now.
 
 ### 3. Engine: offset-aware VOD sessions
-`PlaybackEngine.start(account, item, opts?)` gains `opts.startOffsetSeconds` (default 0). VOD path becomes:
-1. Resolve the panel URL → final CDN URL (§2).
-2. Spawn `ffmpeg -ss <startOffsetSeconds> -i <resolvedUrl> …` producing the same keep-all EVENT HLS (`hls_list_size 0`, `-readrate 1 -readrate_initial_burst <buffer>`), into the session dir. **No curl/FIFO for VOD** — ffmpeg reads the resolved URL directly.
-3. `PlaybackSession` gains: `isLive`, `startOffsetSeconds`, and `durationSeconds | null` (the metadata runtime; null ⇒ unknown → growing-seekbar fallback).
+`PlaybackEngine.start(account, item, opts?)` gains `opts.startOffsetSeconds` (default 0). VOD path becomes: spawn `ffmpeg -ss <startOffsetSeconds> -readrate 1 -readrate_initial_burst <buffer> -i <panelMovieUrl> …` (all input options before `-i`; `-ss` before `-i` = fast range-seek) producing the same keep-all EVENT HLS (`hls_list_size 0`). **No curl/FIFO for VOD** — one ffmpeg process = one panel connection. `playbackUrl(account, item)` already builds the movie/episode URL. Live path is unchanged (curl → FIFO).
 
-Live path is unchanged (curl → FIFO, `isLive: true`, `startOffsetSeconds: 0`, `durationSeconds: null`).
-
-*Regression guard:* the current `curl → FIFO` VOD play-from-0 is already proven working. If the spike shows `ffmpeg -ss 0` direct is any less reliable than curl for offset 0, keep `curl → FIFO` for `startOffsetSeconds === 0` and use `resolve + ffmpeg -ss` only for `> 0` (seeks). Prefer unifying on `ffmpeg -ss` only if the spike is clean.
+`PlaybackSession` gains: `isLive`, `startOffsetSeconds`, and `durationSeconds | null` (metadata runtime; null ⇒ unknown → growing-seekbar fallback).
 
 ### 4. Duration source
 `get_vod_info.durationSecs` (already fetched for `MovieDetail`) flows into the movie play-item / session as `durationSeconds`. For episodes, use `get_series_info` per-episode duration **if present**; otherwise `durationSeconds: null` (that episode keeps the growing seekbar). The player store carries the value onto the session.
