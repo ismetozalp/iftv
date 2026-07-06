@@ -34,14 +34,15 @@ export async function getSeriesInfo(
   const episodesBySeason = asRecord(b.episodes)
 
   const episodes: Episode[] = []
-  for (const seasonList of Object.values(episodesBySeason)) {
+  // episodes is keyed by season number; fall back to that key when an episode omits `season`.
+  for (const [seasonKey, seasonList] of Object.entries(episodesBySeason)) {
     if (!Array.isArray(seasonList)) continue
     for (const raw of seasonList) {
       const e = asRecord(raw)
       episodes.push({
         episodeId: toStr(e.id),
         title: toStr(e.title),
-        season: toNum(e.season) ?? 0,
+        season: toNum(e.season) ?? toNum(seasonKey) ?? 0,
         episodeNum: toNum(e.episode_num) ?? 0,
         containerExtension: toStr(e.container_extension),
       })

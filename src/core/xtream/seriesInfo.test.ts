@@ -75,6 +75,20 @@ describe('getSeriesInfo', () => {
     })
   })
 
+  it('falls back to the season-key when an episode omits its season field', async () => {
+    const t = transport({
+      info: {},
+      episodes: {
+        '3': [{ id: 31, episode_num: 1, title: 'S3E1', container_extension: 'mp4' }], // no `season`
+      },
+    })
+    const out = await getSeriesInfo(t, 'http://h', 'u', 'p', '1')
+    expect(out.seasons).toEqual([3])
+    expect(out.episodes).toEqual([
+      { episodeId: '31', title: 'S3E1', season: 3, episodeNum: 1, containerExtension: 'mp4' },
+    ])
+  })
+
   it('returns empty fields for a non-object body', async () => {
     const t = transport(null)
     expect(await getSeriesInfo(t, 'http://h', 'u', 'p', '1')).toEqual({
