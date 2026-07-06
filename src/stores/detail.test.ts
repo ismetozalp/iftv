@@ -125,4 +125,23 @@ describe('useDetailStore', () => {
     expect(s.mode).toBeNull()
     expect(s.error).toBe('')
   })
+
+  it('closes an open series detail fully, resetting series and mode (e.g. on account switch)', async () => {
+    const t = fakeTransport({
+      info: { name: 'The Series', cover: '', plot: '', cast: '', genre: '' },
+      episodes: {},
+    })
+    const s = useDetailStore()
+    s.$configure({ transport: t })
+    await s.openSeries(ACCT, SERIES)
+    expect(s.open).toBe(true)
+
+    s.close()
+
+    expect(s.open).toBe(false)
+    expect(s.mode).toBeNull()
+    expect(s.movie).toBeNull()
+    expect(s.series).toBeNull()
+    expect(s.item).toBeNull()
+  })
 })

@@ -37,6 +37,7 @@ async function sync() {
   const seq = ++syncSeq
   query.value = ''
   results.value = []
+  detail.close()
   await lib.setContext(ws.activeAccount, props.section)
   if (seq !== syncSeq) return
   selectedCat.value = lib.categories[0]?.id ?? null
