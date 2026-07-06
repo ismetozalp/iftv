@@ -18,9 +18,26 @@ watch(
     if (!session || !video.value) return
     if (Hls.isSupported()) {
       const Loader = session.createLoader() as never
-      hls = new Hls({ pLoader: Loader, fLoader: Loader, enableWorker: false })
+      hls = new Hls({
+        pLoader: Loader,
+        fLoader: Loader,
+        enableWorker: false,
+        // live tuning so playback keeps following the rolling window instead of stalling ~10s in
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 20,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 120,
+        fragLoadingMaxRetry: 10,
+        levelLoadingMaxRetry: 10,
+      })
+      let mediaRecoveries = 0
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) { teardown(); void player.fail(`Playback error: ${data.details}`) }
+        if (!data.fatal) return
+        // Recover from transient live errors rather than killing the whole session.
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls?.startLoad(); return }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries++ < 3) { hls?.recoverMediaError(); return }
+        teardown()
+        void player.fail(`Playback error: ${data.details}`)
       })
       hls.loadSource(session.sourceUrl)
       hls.attachMedia(video.value)
