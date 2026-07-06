@@ -58,7 +58,9 @@ export function mapArgs(audioIndex: number): string[] {
 // A second ffmpeg output: burns the chosen subtitle stream to a standalone WebVTT file (read
 // separately via session.readSubtitle()). Emits nothing when no subtitle was chosen.
 export function subtitleOutputArgs(subtitleIndex: number | null, subtitlePath: string | null): string[] {
-  return subtitleIndex != null && subtitlePath ? ['-map', `0:s:${subtitleIndex}`, '-c:s', 'webvtt', '-f', 'webvtt', subtitlePath] : []
+  // -flush_packets 1 is REQUIRED: without it the webvtt muxer buffers all cues and only writes the
+  // file on close, so a live/long playback would show an empty subtitle file until it ends.
+  return subtitleIndex != null && subtitlePath ? ['-map', `0:s:${subtitleIndex}`, '-c:s', 'webvtt', '-flush_packets', '1', '-f', 'webvtt', subtitlePath] : []
 }
 
 // ffmpeg reads the local FIFO (no network — no redirect/HTTP quirks), remuxes video and

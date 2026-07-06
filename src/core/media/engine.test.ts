@@ -139,7 +139,7 @@ describe('createPlaybackEngine.start', () => {
     const s = await createPlaybackEngine(d).start(XT, movie, { audioIndex: 1, subtitleIndex: 0 })
     const ff = spawnArgs(d).find((a) => a[0] === 'ffmpeg')!.join(' ')
     expect(ff).toContain('-map 0:a:1')
-    expect(ff).toContain('-map 0:s:0 -c:s webvtt -f webvtt /home/u/.cache/inflighttv/sid/sub.vtt')
+    expect(ff).toContain('-map 0:s:0 -c:s webvtt -flush_packets 1 -f webvtt /home/u/.cache/inflighttv/sid/sub.vtt')
     expect(typeof s.readSubtitle).toBe('function')
     await s.readSubtitle()
     expect(d.readFile).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid/sub.vtt')

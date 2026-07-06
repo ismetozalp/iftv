@@ -61,17 +61,22 @@ function teardown() {
   now.value = 0
   bufferedEnd.value = 0
   paused.value = false
+  // NOTE: subtitle timer/blob are owned by refreshSub() + its watch, NOT cleared here — the main
+  // session watch's teardown() fires AFTER refreshSub's watch on a restart, so clearing them here
+  // would kill the timer refreshSub just armed (leaving only the first, empty-.vtt read).
+}
+
+function clearSub() {
   if (subTimer) { clearInterval(subTimer); subTimer = null }
   if (subBlobUrl) { URL.revokeObjectURL(subBlobUrl); subBlobUrl = null }
+  if (subTrack.value) subTrack.value.src = ''
 }
 
 // Poll the (growing) WebVTT subtitle file every ~3s and refresh the <track> blob src so newly
 // muxed cues show up. Off/no-session → stop the timer and clear the track.
 async function refreshSub() {
   if (player.selectedSubtitle == null || !player.session) {
-    if (subTimer) { clearInterval(subTimer); subTimer = null }
-    if (subBlobUrl) { URL.revokeObjectURL(subBlobUrl); subBlobUrl = null }
-    if (subTrack.value) subTrack.value.src = ''
+    clearSub()
     return
   }
   if (subTimer) clearInterval(subTimer)
@@ -150,7 +155,7 @@ watch(
   },
 )
 
-onBeforeUnmount(teardown)
+onBeforeUnmount(() => { teardown(); clearSub() })
 
 function close() {
   teardown()
