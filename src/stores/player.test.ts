@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePlayerStore } from './player'
+import { useSettingsStore } from './settings'
 import type { PlaybackEngine, PlaybackSession } from '@/core/media/PlaybackEngine'
 import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
@@ -26,7 +27,7 @@ describe('usePlayerStore', () => {
     const p = usePlayerStore()
     p.$configure({ engine })
     await p.play(ACCT, item)
-    expect(engine.start).toHaveBeenCalledWith(ACCT, item, { bufferSeconds: 30, startOffsetSeconds: 0 })
+    expect(engine.start).toHaveBeenCalledWith(ACCT, item, { bufferSeconds: 30, startOffsetSeconds: 0, videoCodec: 'copy' })
     expect(p.status).toBe('playing')
     expect(p.item?.id).toBe('x:live:1')
     expect(p.session?.sourceUrl).toBe('iftv://s/index.m3u8')
@@ -168,5 +169,87 @@ describe('usePlayerStore', () => {
     await Promise.all([seekP, stopP])
     expect(p.status).toBe('idle')
     expect(p.session).toBeNull()
+  })
+
+  it('retryWithTranscode restarts the SAME item at the same offset with a resolved encoder, once', async () => {
+    const starts: unknown[] = []
+    const engine: PlaybackEngine = {
+      start: vi.fn(async (_a, _i, o) => { starts.push(o); return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} } }),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {} })
+    useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.seek(1200)
+    starts.length = 0
+    await p.retryWithTranscode()
+    expect(p.transcode).toBe(true)
+    expect(starts).toHaveLength(1)
+    expect(starts[0]).toMatchObject({ startOffsetSeconds: 1200, videoCodec: 'nvenc' }) // same offset, GPU
+  })
+
+  it('a seek after transcoding stays transcoded', async () => {
+    const engine: PlaybackEngine = {
+      start: vi.fn(async () => ({ sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} })),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {} })
+    useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.retryWithTranscode()
+    await p.seek(1800)
+    expect(p.transcode).toBe(true)
+    expect(engine.start).toHaveBeenLastCalledWith(ACCT, MOVIE, expect.objectContaining({ startOffsetSeconds: 1800, videoCodec: 'nvenc' }))
+  })
+
+  it('play() resets transcode to copy', async () => {
+    const engine: PlaybackEngine = {
+      start: vi.fn(async () => ({ sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} })),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {} })
+    useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    await p.retryWithTranscode()
+    expect(p.transcode).toBe(true)
+    await p.play(ACCT, { ...MOVIE, id: 'x:movie:22', streamId: '22' }, { durationSeconds: 100 })
+    expect(p.transcode).toBe(false)
+    expect(engine.start).toHaveBeenLastCalledWith(ACCT, { ...MOVIE, id: 'x:movie:22', streamId: '22' }, expect.objectContaining({ videoCodec: 'copy' }))
+  })
+
+  it('retryWithTranscode with transcodeMode "off" sets an error and does NOT start a new session', async () => {
+    const { engine } = engineWith()
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {} })
+    useSettingsStore().$patch({ transcodeMode: 'off' })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    ;(engine.start as ReturnType<typeof vi.fn>).mockClear()
+    await p.retryWithTranscode()
+    expect(p.transcode).toBe(false)
+    expect(p.status).toBe('error')
+    expect(p.error).toMatch(/transcod/i)
+    expect(engine.start).not.toHaveBeenCalled()
+  })
+
+  it('retryWithTranscode falls back from nvenc to x264 when the engine rejects the nvenc attempt', async () => {
+    const starts: unknown[] = []
+    const engine: PlaybackEngine = {
+      start: vi.fn(async (_a, _i, o) => {
+        starts.push(o)
+        if (o?.videoCodec === 'nvenc') throw new Error('nvenc init failed')
+        return { sourceUrl: 's', isLive: false, createLoader: () => class {}, stop: async () => {} }
+      }),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => {} })
+    useSettingsStore().$patch({ transcodeMode: 'gpu', encoderTest: { nvenc: true, x264: true, testedAt: 1 } })
+    await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+    starts.length = 0
+    await p.retryWithTranscode()
+    expect(starts).toHaveLength(2)
+    expect(starts[0]).toMatchObject({ videoCodec: 'nvenc' })
+    expect(starts[1]).toMatchObject({ videoCodec: 'x264' })
+    expect(p.status).toBe('playing')
+    expect(p.transcode).toBe(true)
   })
 })

@@ -87,6 +87,15 @@ describe('createPlaybackEngine.start', () => {
     expect(ff).toContain('-hls_playlist_type event')
   })
 
+  it('forwards videoCodec into the ffmpeg args (nvenc transcode for a movie)', async () => {
+    const movie = { ...item, id: 'x:movie:9', kind: 'movie' as const, streamId: '9', containerExtension: 'mkv' }
+    const d = deps()
+    await createPlaybackEngine(d).start(XT, movie, { videoCodec: 'nvenc' })
+    const ff = spawnArgs(d).find((a) => a[0] === 'ffmpeg')!
+    expect(ff).toContain('-c:v')
+    expect(ff).toContain('h264_nvenc')
+  })
+
   it('waits (polls) for the playlist to appear before returning', async () => {
     let n = 0
     const d = deps({ readFile: vi.fn(async () => (++n < 3 ? null : new TextEncoder().encode('#EXTM3U'))) })

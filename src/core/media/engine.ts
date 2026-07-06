@@ -11,7 +11,7 @@ const PLAYLIST_INTERVAL_MS = 500
 
 export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
   return {
-    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number }): Promise<PlaybackSession> {
+    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264' }): Promise<PlaybackSession> {
       const inputUrl = playbackUrl(account, item)
       if (!inputUrl) throw new Error('This item is not playable')
 
@@ -25,6 +25,7 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       // panel never sees more than the one ffmpeg connection.
       const live = item.kind === 'live'
       const bufferSeconds = opts?.bufferSeconds ?? 30
+      const videoCodec = opts?.videoCodec ?? 'copy'
 
       let procs: FfmpegProc[]
       if (live) {
@@ -35,10 +36,10 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
         // stalls on for many Xtream panels) and writes it into the FIFO; ffmpeg reads the FIFO —
         // a local input, so no redirect/HTTP quirks — and remuxes to HLS.
         const curl = deps.spawn(['curl', ...buildCurlArgs({ url: inputUrl, outPath: fifo, userAgent: STREAM_USER_AGENT })])
-        const ff = deps.spawn(['ffmpeg', ...buildLiveRemuxArgs({ inputPath: fifo, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir) })])
+        const ff = deps.spawn(['ffmpeg', ...buildLiveRemuxArgs({ inputPath: fifo, liveWindow, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec })])
         procs = [curl, ff]
       } else {
-        const ff = deps.spawn(['ffmpeg', ...buildVodRemuxArgs({ inputUrl, offsetSeconds: opts?.startOffsetSeconds ?? 0, burstSeconds: bufferSeconds, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir) })])
+        const ff = deps.spawn(['ffmpeg', ...buildVodRemuxArgs({ inputUrl, offsetSeconds: opts?.startOffsetSeconds ?? 0, burstSeconds: bufferSeconds, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir), videoCodec })])
         procs = [ff]
       }
       const stopAll = (problem: string) => {

@@ -9,7 +9,7 @@ export interface PlaybackSession {
 }
 
 export interface PlaybackEngine {
-  start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number }): Promise<PlaybackSession>
+  start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264' }): Promise<PlaybackSession>
 }
 
 export interface FfmpegProc {

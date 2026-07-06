@@ -5,6 +5,7 @@ import type { ContentItem } from '@/core/content/types'
 import type { PlaybackEngine, PlaybackSession } from '@/core/media/PlaybackEngine'
 import { createCockpitPlaybackEngine } from '@/adapters/cockpitPlayback'
 import { useSettingsStore } from '@/stores/settings'
+import { resolveEncoder } from '@/core/media/encoder'
 
 interface PlayerDeps { engine: PlaybackEngine; sleep?: (ms: number) => Promise<void> }
 
@@ -19,6 +20,7 @@ export const usePlayerStore = defineStore('player', {
     duration: null as number | null,
     startOffset: 0,
     account: null as Account | null,
+    transcode: false,
     _deps: null as PlayerDeps | null,
     // Concurrency guard (non-reactive): `lock` serialises play/seek/stop/fail so their async
     // bodies never interleave, and `gen` supersedes an in-flight op when a newer one starts.
@@ -43,6 +45,27 @@ export const usePlayerStore = defineStore('player', {
       this._mx.lock = run.then(() => {}, () => {})
       return run
     },
+    // Which codec the NEXT start() should request: 'copy' unless we're in a transcode session,
+    // in which case resolve GPU/CPU from Settings (mode + last encoder probe).
+    _resolveVideoCodec(): 'copy' | 'nvenc' | 'x264' {
+      if (!this.transcode) return 'copy'
+      const settings = useSettingsStore()
+      return resolveEncoder(settings.transcodeMode, settings.encoderTest)
+    },
+    // Start the session, and if an nvenc attempt throws, retry ONCE with x264 before surfacing
+    // the error — a runtime GPU failure (driver/session-limit/etc.) shouldn't strand playback.
+    async _startWithFallback(account: Account, item: ContentItem, opts: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264' }): Promise<PlaybackSession> {
+      const engine = await this._engine()
+      try {
+        return await engine.start(account, item, opts)
+      } catch (e) {
+        if (opts.videoCodec === 'nvenc') {
+          const fallbackEngine = await this._engine()
+          return fallbackEngine.start(account, item, { ...opts, videoCodec: 'x264' })
+        }
+        throw e
+      }
+    },
     async play(account: Account, item: ContentItem, opts?: { durationSeconds?: number | null }) {
       const gen = ++this._mx.gen
       await this._exclusive(async () => {
@@ -54,10 +77,10 @@ export const usePlayerStore = defineStore('player', {
         this.account = account
         this.duration = opts?.durationSeconds ?? null
         this.startOffset = 0
+        this.transcode = false
         try {
-          const engine = await this._engine()
           const bufferSeconds = useSettingsStore().bufferSeconds
-          const session = await engine.start(account, item, { bufferSeconds, startOffsetSeconds: 0 })
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: 0, videoCodec: this._resolveVideoCodec() })
           if (gen !== this._mx.gen) { await session.stop(); return } // superseded while starting
           this.session = session
           this.status = 'playing'
@@ -89,8 +112,46 @@ export const usePlayerStore = defineStore('player', {
         await this.sleep(SETTLE_MS) // let the panel see the drop before reconnecting
         if (gen !== this._mx.gen) return // superseded during settle → the newer op will start
         try {
-          const engine = await this._engine()
-          const session = await engine.start(account, item, { bufferSeconds, startOffsetSeconds: target })
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec() })
+          if (gen !== this._mx.gen) { await session.stop(); return }
+          this.session = session
+          this.startOffset = target
+          this.status = 'playing'
+        } catch (e) {
+          if (gen === this._mx.gen) {
+            this.status = 'error'
+            this.error = e instanceof Error ? e.message : String(e)
+            this.session = null
+          }
+        }
+      })
+    },
+    // Restart the CURRENT item, at the CURRENT offset, forcing a transcode — used when the
+    // player detects the source can't be decoded as-is (e.g. HEVC). Mirrors seek()'s single-flight
+    // restart exactly (same mutex+gen discipline), so it can never overlap a play/seek/stop.
+    async retryWithTranscode() {
+      if (!this.account || !this.item) return
+      if (useSettingsStore().transcodeMode === 'off') {
+        this.error = 'Transcoding is turned off in Settings'
+        this.status = 'error'
+        return
+      }
+      const gen = ++this._mx.gen
+      await this._exclusive(async () => {
+        if (gen !== this._mx.gen) return // a newer seek/play/stop replaced this one
+        const account = this.account
+        const item = this.item
+        if (!account || !item) return
+        this.transcode = true
+        const bufferSeconds = useSettingsStore().bufferSeconds
+        const target = this.startOffset
+        const s = this.session
+        this.session = null
+        if (s) await s.stop() // release the one connection first
+        await this.sleep(SETTLE_MS) // let the panel see the drop before reconnecting
+        if (gen !== this._mx.gen) return // superseded during settle → the newer op will start
+        try {
+          const session = await this._startWithFallback(account, item, { bufferSeconds, startOffsetSeconds: target, videoCodec: this._resolveVideoCodec() })
           if (gen !== this._mx.gen) { await session.stop(); return }
           this.session = session
           this.startOffset = target
@@ -115,6 +176,7 @@ export const usePlayerStore = defineStore('player', {
         this.error = ''
         this.duration = null
         this.startOffset = 0
+        this.transcode = false
         if (s) await s.stop()
       })
     },
@@ -128,6 +190,7 @@ export const usePlayerStore = defineStore('player', {
         this.error = message
         this.duration = null
         this.startOffset = 0
+        this.transcode = false
         if (s) await s.stop()
       })
     },
