@@ -60,4 +60,16 @@ describe('usePlayerStore', () => {
     expect(p.status).toBe('idle')
     expect(p.session).toBeNull()
   })
+
+  it('fail() stops the session but stays in error with the message', async () => {
+    const { engine, stop } = engineWith()
+    const p = usePlayerStore()
+    p.$configure({ engine })
+    await p.play(ACCT, item)
+    await p.fail('boom')
+    expect(stop).toHaveBeenCalled()
+    expect(p.status).toBe('error')
+    expect(p.error).toBe('boom')
+    expect(p.session).toBeNull()
+  })
 })

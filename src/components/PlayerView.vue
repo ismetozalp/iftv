@@ -20,7 +20,7 @@ watch(
       const Loader = session.createLoader() as never
       hls = new Hls({ pLoader: Loader, fLoader: Loader, enableWorker: false })
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) player.error = `Playback error: ${data.details}`
+        if (data.fatal) { teardown(); void player.fail(`Playback error: ${data.details}`) }
       })
       hls.loadSource(session.sourceUrl)
       hls.attachMedia(video.value)

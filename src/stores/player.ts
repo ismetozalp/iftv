@@ -45,5 +45,13 @@ export const usePlayerStore = defineStore('player', {
       this.error = ''
       if (s) await s.stop()
     },
+    // Fatal playback failure: kill the ffmpeg session but keep the overlay showing the error.
+    async fail(message: string) {
+      const s = this.session
+      this.session = null
+      this.status = 'error'
+      this.error = message
+      if (s) await s.stop()
+    },
   },
 })
