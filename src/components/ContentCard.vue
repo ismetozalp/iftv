@@ -4,6 +4,8 @@ import type { ContentItem } from '@/core/content/types'
 import { useProxiedImage } from '@/composables/useProxiedImage'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useCollectionsStore } from '@/stores/collections'
+import { useEpgStore } from '@/stores/epg'
+import EpgSchedule from '@/components/EpgSchedule.vue'
 
 const props = withDefaults(defineProps<{ item: ContentItem; context?: 'browse' | 'library' }>(), {
   context: 'browse',
@@ -14,8 +16,14 @@ const { url, failed } = useProxiedImage(() => props.item.logo)
 
 const ws = useWorkspaceStore()
 const collections = useCollectionsStore()
+const epg = useEpgStore()
 
 const menuOpen = ref(false)
+const scheduleOpen = ref(false)
+
+const isLive = computed(() => props.item.kind === 'live')
+const nn = computed(() => (isLive.value ? epg.nowNextFor(props.item.name) : { now: null, next: null }))
+const hasSchedule = computed(() => isLive.value && epg.hasEpgFor(props.item.name))
 
 const canWatchLater = computed(
   () => props.item.kind === 'movie' || props.item.kind === 'series' || props.item.kind === 'episode',
@@ -39,6 +47,9 @@ function toggleMenu() {
 }
 function closeMenu() {
   menuOpen.value = false
+}
+function toggleSchedule() {
+  scheduleOpen.value = !scheduleOpen.value
 }
 function addToWatchLater() {
   const account = ws.activeAccount
@@ -68,6 +79,7 @@ function remove() {
 
 function onDocClick() {
   menuOpen.value = false
+  scheduleOpen.value = false
 }
 onMounted(() => document.addEventListener('click', onDocClick))
 onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
@@ -80,9 +92,19 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       <span v-else class="iftv-card-fallback">{{ item.name.slice(0, 2).toUpperCase() }}</span>
     </div>
     <div class="iftv-card-name text-truncate">{{ item.name }}</div>
+    <div v-if="nn.now" class="iftv-card-epg text-truncate">
+      ● {{ nn.now.title }}<span v-if="nn.next" class="text-muted"> · {{ nn.next.title }}</span>
+    </div>
 
-    <div v-if="ws.activeAccount" class="iftv-card-actions" @click.stop>
+    <div v-if="ws.activeAccount || hasSchedule" class="iftv-card-actions" @click.stop>
+      <div v-if="hasSchedule" class="iftv-card-schedule">
+        <button type="button" class="btn btn-sm iftv-card-info-btn" title="Schedule" @click.stop="toggleSchedule">🕐</button>
+        <div v-if="scheduleOpen" class="iftv-card-menu iftv-card-schedule-panel dropdown-menu show" @click.stop>
+          <EpgSchedule :channel-name="item.name" />
+        </div>
+      </div>
       <button
+        v-if="ws.activeAccount"
         type="button"
         class="btn btn-sm iftv-card-fav"
         :class="{ 'iftv-card-fav-active': isFav }"
@@ -93,7 +115,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
         <span v-else>☆</span>
       </button>
 
-      <div v-if="context === 'browse'" class="iftv-card-add">
+      <div v-if="ws.activeAccount && context === 'browse'" class="iftv-card-add">
         <button type="button" class="btn btn-sm iftv-card-add-btn" title="Add to…" @click.stop="toggleMenu">＋</button>
         <div v-if="menuOpen" class="iftv-card-menu dropdown-menu show" @click.stop>
           <button v-if="canWatchLater" type="button" class="dropdown-item" @click="addToWatchLater">
@@ -106,7 +128,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
           <button type="button" class="dropdown-item" @click="addToNewList">New list…</button>
         </div>
       </div>
-      <button v-else type="button" class="btn btn-sm iftv-card-remove" title="Remove" @click.stop="remove">✕</button>
+      <button v-else-if="ws.activeAccount" type="button" class="btn btn-sm iftv-card-remove" title="Remove" @click.stop="remove">✕</button>
     </div>
   </div>
 </template>

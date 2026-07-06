@@ -27,14 +27,21 @@ body { margin: 0; }
 .iftv-card-movie .iftv-card-img img, .iftv-card-series .iftv-card-img img { object-fit: cover; height: 100%; width: 100%; border-radius: 4px; }
 .iftv-card-fallback { font-size: 1.4rem; font-weight: 600; color: var(--bs-secondary); }
 .iftv-card-name { width: 100%; text-align: center; font-size: 0.82rem; margin-top: 0.25rem; }
+.iftv-card-epg { width: 100%; text-align: center; font-size: 0.72rem; color: var(--bs-secondary); margin-top: 0.1rem; }
 
 .iftv-card-actions { position: absolute; top: 0.25rem; right: 0.25rem; display: flex; gap: 0.2rem; z-index: 2; }
-.iftv-card-fav, .iftv-card-add-btn, .iftv-card-remove {
+.iftv-card-fav, .iftv-card-add-btn, .iftv-card-remove, .iftv-card-info-btn {
   padding: 0 0.35rem; line-height: 1.6; border: none; background: rgba(0, 0, 0, 0.55); color: #fff; border-radius: 0.3rem;
 }
 .iftv-card-fav-active { color: #ffc107; }
-.iftv-card-add { position: relative; }
+.iftv-card-add, .iftv-card-schedule { position: relative; }
 .iftv-card-menu { position: absolute; top: 100%; right: 0; min-width: 10rem; max-height: 14rem; overflow-y: auto; z-index: 3; }
+.iftv-card-schedule-panel { min-width: 14rem; max-height: 16rem; padding: 0.4rem; }
+.iftv-epg-schedule-empty { font-size: 0.8rem; padding: 0.25rem; }
+.iftv-epg-schedule-row { display: flex; gap: 0.5rem; font-size: 0.8rem; padding: 0.15rem 0.25rem; border-radius: 0.25rem; }
+.iftv-epg-schedule-time { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--bs-secondary); }
+.iftv-epg-schedule-title { min-width: 0; }
+.iftv-epg-schedule-current { background: rgba(13, 110, 253, 0.15); font-weight: 600; }
 
 .iftv-cw-cell { position: relative; height: 100%; }
 .iftv-cw-progress { position: absolute; left: 0.6rem; right: 0.6rem; bottom: 0.35rem; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.35); z-index: 2; overflow: hidden; }
@@ -57,6 +64,11 @@ body { margin: 0; }
   padding: 0.5rem 1rem; border-radius: 0.5rem;
   background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 0.9rem; pointer-events: none;
 }
+
+.iftv-epg-strip { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.3rem 0.75rem; background: #111; color: #cde; }
+.iftv-epg-strip-title { font-size: 0.8rem; }
+.iftv-epg-progress { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.2); overflow: hidden; }
+.iftv-epg-progress-bar { height: 100%; background: #0d6efd; }
 
 .iftv-seekbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.8rem; background: rgba(0, 0, 0, 0.85); }
 .iftv-seek-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: #444; cursor: pointer; }
