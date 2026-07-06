@@ -1,6 +1,12 @@
 export function cacheRoot(home: string): string {
   return `${home}/.cache/inflighttv`
 }
+// SAFETY: a user-supplied cacheDir always gets our own /inflighttv subdir appended,
+// so cleanup/clear never touches the raw user-chosen path.
+export function resolveCacheRoot(home: string, cacheDir: string): string {
+  const d = cacheDir.trim().replace(/\/+$/, '')
+  return d ? `${d}/inflighttv` : cacheRoot(home)
+}
 export function sessionDir(root: string, id: string): string {
   return `${root}/${id}`
 }

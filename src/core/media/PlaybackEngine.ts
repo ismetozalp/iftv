@@ -26,4 +26,7 @@ export interface EngineDeps {
   spawn(argv: string[]): FfmpegProc
   readFile(path: string): Promise<Uint8Array | null>
   wait(ms: number): Promise<void>
+  cacheDir(): Promise<string>
+  cacheLimitBytes(): Promise<number>
+  listSessionDirs(root: string): Promise<{ id: string; sizeBytes: number; mtime: number }[]>
 }

@@ -1,11 +1,13 @@
 import cockpit from 'cockpit'
 import type { EngineDeps, PlaybackEngine } from '@/core/media/PlaybackEngine'
 import { createPlaybackEngine } from '@/core/media/engine'
-import { cacheRoot } from '@/core/media/session'
+import { resolveCacheRoot } from '@/core/media/session'
+import { useSettingsStore } from '@/stores/settings'
+import { listSessionDirs as cacheListSessionDirs } from '@/adapters/cockpitCache'
 
 export async function createCockpitPlaybackEngine(): Promise<PlaybackEngine> {
   const user = await cockpit.user()
-  const root = cacheRoot(user.home)
+  const root = resolveCacheRoot(user.home, useSettingsStore().cacheDir)
   // Best-effort cleanup of stale session dirs from prior/crashed runs. Remove the whole
   // cache root (a later session's `mkdir -p` recreates it). Pass the path as an argv element
   // — no shell, so it can't be command-injected via an odd home dir — and AWAIT it so it
@@ -30,6 +32,9 @@ export async function createCockpitPlaybackEngine(): Promise<PlaybackEngine> {
       }
     },
     wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+    cacheDir: async () => useSettingsStore().cacheDir,
+    cacheLimitBytes: async () => useSettingsStore().cacheLimitGb * 1024 ** 3,
+    listSessionDirs: (root) => cacheListSessionDirs(root),
   }
   return createPlaybackEngine(deps)
 }
