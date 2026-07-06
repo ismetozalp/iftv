@@ -1,7 +1,7 @@
 import type { XtreamTransport } from './transport'
 import { buildPlayerApiParams } from './transport'
 import { parseXtreamUrl, toStr } from './normalize'
-import type { Category, Channel } from '@/core/content/types'
+import type { Category, ContentItem } from '@/core/content/types'
 
 export async function getLiveCategories(
   t: XtreamTransport, url: string, username: string, password: string,
@@ -16,7 +16,7 @@ export async function getLiveCategories(
 
 export async function getLiveStreams(
   t: XtreamTransport, url: string, username: string, password: string, categoryId?: string,
-): Promise<Channel[]> {
+): Promise<ContentItem[]> {
   const extra: Record<string, string> = { action: 'get_live_streams' }
   if (categoryId) extra.category_id = categoryId
   const body = await t.getJson(parseXtreamUrl(url), '/player_api.php',
@@ -27,11 +27,14 @@ export async function getLiveStreams(
       const r = s as Record<string, unknown>
       const streamId = toStr(r.stream_id)
       return {
-        id: `x:${streamId}`,
+        id: `x:live:${streamId}`,
+        kind: 'live' as const,
         name: toStr(r.name),
         logo: toStr(r.stream_icon),
         categoryId: toStr(r.category_id),
         streamId: streamId || null,
+        seriesId: null,
+        containerExtension: null,
         url: null as string | null,
       }
     })

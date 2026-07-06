@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useLibraryStore } from '@/stores/library'
-import type { Channel } from '@/core/content/types'
+import type { ContentItem } from '@/core/content/types'
 import VirtualGrid from '@/components/VirtualGrid.vue'
 import ChannelCard from '@/components/ChannelCard.vue'
 
@@ -11,7 +11,7 @@ const lib = useLibraryStore()
 
 const selectedCat = ref<string | null>(null)
 const query = ref('')
-const results = ref<Channel[]>([])
+const results = ref<ContentItem[]>([])
 
 let syncSeq = 0
 async function syncAccount() {
@@ -39,8 +39,8 @@ watch(query, async (q) => {
   if (seq === searchSeq) results.value = r
 })
 
-const shown = computed<Channel[]>(() =>
-  query.value.trim() ? results.value : selectedCat.value ? lib.channelsFor(selectedCat.value) : [],
+const shown = computed<ContentItem[]>(() =>
+  query.value.trim() ? results.value : selectedCat.value ? lib.itemsFor(selectedCat.value) : [],
 )
 </script>
 
@@ -69,7 +69,7 @@ const shown = computed<Channel[]>(() =>
       </p>
       <VirtualGrid v-else :items="shown">
         <template #default="{ item }">
-          <ChannelCard :channel="(item as Channel)" />
+          <ChannelCard :channel="(item as ContentItem)" />
         </template>
       </VirtualGrid>
     </section>

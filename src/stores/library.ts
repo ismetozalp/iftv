@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Account } from '@/core/accounts/accounts'
-import type { Category, Channel } from '@/core/content/types'
+import type { Category, ContentItem } from '@/core/content/types'
 import { createProvider, type ContentProvider } from '@/core/content/provider'
 import { useHost } from '@/composables/useHost'
 
@@ -10,15 +10,15 @@ export const useLibraryStore = defineStore('library', {
   state: () => ({
     accountId: null as string | null,
     categories: [] as Category[],
-    channelsByCat: {} as Record<string, Channel[]>,
-    all: null as Channel[] | null,
+    itemsByCat: {} as Record<string, ContentItem[]>,
+    all: null as ContentItem[] | null,
     loading: false,
     error: '',
     _provider: null as ContentProvider | null,
     _deps: null as LibDeps | null,
   }),
   getters: {
-    channelsFor: (s) => (categoryId: string): Channel[] => s.channelsByCat[categoryId] ?? [],
+    itemsFor: (s) => (categoryId: string): ContentItem[] => s.itemsByCat[categoryId] ?? [],
   },
   actions: {
     $configure(deps: LibDeps) {
@@ -32,7 +32,7 @@ export const useLibraryStore = defineStore('library', {
     },
     _reset() {
       this.categories = []
-      this.channelsByCat = {}
+      this.itemsByCat = {}
       this.all = null
       this.error = ''
       this._provider = null
@@ -59,23 +59,23 @@ export const useLibraryStore = defineStore('library', {
       }
     },
     async loadCategory(categoryId: string) {
-      if (!this._provider || this.channelsByCat[categoryId]) return
+      if (!this._provider || this.itemsByCat[categoryId]) return
       this.loading = true
       this.error = ''
       try {
-        this.channelsByCat = { ...this.channelsByCat, [categoryId]: await this._provider.getChannels(categoryId) }
+        this.itemsByCat = { ...this.itemsByCat, [categoryId]: await this._provider.getItems(categoryId) }
       } catch (e) {
         this.error = e instanceof Error ? e.message : String(e)
       } finally {
         this.loading = false
       }
     },
-    async search(query: string): Promise<Channel[]> {
+    async search(query: string): Promise<ContentItem[]> {
       if (!this._provider) return []
       if (!this.all) {
         this.loading = true
         try {
-          this.all = await this._provider.getAllChannels()
+          this.all = await this._provider.getAllItems()
         } catch (e) {
           this.error = e instanceof Error ? e.message : String(e)
           this.all = []

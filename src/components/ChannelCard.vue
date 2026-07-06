@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { Channel } from '@/core/content/types'
+import type { ContentItem } from '@/core/content/types'
 
-const props = defineProps<{ channel: Channel }>()
+const props = defineProps<{ channel: ContentItem }>()
 const failed = ref(false)
 
 watch(() => props.channel.id, () => { failed.value = false })

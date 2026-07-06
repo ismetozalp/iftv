@@ -1,4 +1,4 @@
-import type { Category, Channel } from './types'
+import type { Category, ContentItem } from './types'
 
 function attr(line: string, name: string): string {
   return new RegExp(`${name}="([^"]*)"`, 'i').exec(line)?.[1] ?? ''
@@ -17,8 +17,8 @@ function displayName(line: string): string {
   return ''
 }
 
-export function parseM3u(text: string): { categories: Category[]; channels: Channel[] } {
-  const channels: Channel[] = []
+export function parseM3u(text: string): { categories: Category[]; items: ContentItem[] } {
+  const items: ContentItem[] = []
   const order: string[] = []
   const seen = new Set<string>()
   let pending: { name: string; logo: string; group: string } | null = null
@@ -30,17 +30,20 @@ export function parseM3u(text: string): { categories: Category[]; channels: Chan
       pending = { name, logo: attr(line, 'tvg-logo'), group: attr(line, 'group-title') || 'Uncategorized' }
     } else if (line !== '' && !line.startsWith('#') && pending) {
       if (!seen.has(pending.group)) { seen.add(pending.group); order.push(pending.group) }
-      channels.push({
-        id: `m:${channels.length}`,
+      items.push({
+        id: `m:${items.length}`,
+        kind: 'live',
         name: pending.name,
         logo: pending.logo,
         categoryId: pending.group,
         streamId: null,
+        seriesId: null,
+        containerExtension: null,
         url: line,
       })
       pending = null
     }
   }
 
-  return { categories: order.map((g) => ({ id: g, name: g })), channels }
+  return { categories: order.map((g) => ({ id: g, name: g })), items }
 }

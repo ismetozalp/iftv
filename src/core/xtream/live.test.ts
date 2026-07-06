@@ -34,7 +34,7 @@ describe('getLiveStreams', () => {
       { name: 'No id', category_id: '1' },
     ])
     expect(await getLiveStreams(t, 'http://h', 'u', 'p')).toEqual([
-      { id: 'x:101', name: 'CNN', logo: 'http://l/cnn.png', categoryId: '1', streamId: '101', url: null },
+      { id: 'x:live:101', kind: 'live', name: 'CNN', logo: 'http://l/cnn.png', categoryId: '1', streamId: '101', seriesId: null, containerExtension: null, url: null },
     ])
   })
   it('includes category_id param when given', async () => {
