@@ -3,6 +3,7 @@ import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import AccountTabBar from '@/components/AccountTabBar.vue'
 import PlayerView from '@/components/PlayerView.vue'
+import MovieDetail from '@/views/detail/MovieDetail.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const ws = useWorkspaceStore()
@@ -18,6 +19,7 @@ onMounted(() => ws.init())
     <main class="iftv-main">
       <RouterView />
     </main>
+    <MovieDetail />
     <PlayerView />
   </div>
 </template>

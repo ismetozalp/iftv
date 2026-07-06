@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useLibraryStore } from '@/stores/library'
 import { usePlayerStore } from '@/stores/player'
+import { useDetailStore } from '@/stores/detail'
 import type { ContentItem } from '@/core/content/types'
 import type { Section } from '@/core/content/provider'
 import VirtualGrid from '@/components/VirtualGrid.vue'
@@ -12,8 +13,11 @@ const props = defineProps<{ section: Section }>()
 const ws = useWorkspaceStore()
 const lib = useLibraryStore()
 const player = usePlayerStore()
+const detail = useDetailStore()
 function onPlay(item: ContentItem) {
-  if ((item.kind === 'live' || item.kind === 'movie') && ws.activeAccount) player.play(ws.activeAccount, item)
+  if (!ws.activeAccount) return
+  if (item.kind === 'live') player.play(ws.activeAccount, item)
+  else if (item.kind === 'movie') detail.openMovie(ws.activeAccount, item)
 }
 
 const selectedCat = ref<string | null>(null)
