@@ -12,6 +12,7 @@ function deps(over: Partial<EngineDeps> = {}): EngineDeps {
     home: async () => '/home/u',
     newId: () => 'sid',
     mkdir: vi.fn(async () => {}),
+    mkfifo: vi.fn(async () => {}),
     rmrf: vi.fn(async () => {}),
     spawn: vi.fn(() => ({ close: vi.fn() })),
     readFile: vi.fn(async () => new TextEncoder().encode('#EXTM3U')), // playlist ready immediately
@@ -20,18 +21,31 @@ function deps(over: Partial<EngineDeps> = {}): EngineDeps {
   }
 }
 
+function spawnArgs(d: EngineDeps): string[][] {
+  return (d.spawn as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string[])
+}
+
 describe('createPlaybackEngine.start', () => {
-  it('mkdirs the session dir, spawns ffmpeg with the input URL, returns the source url', async () => {
+  it('mkdirs + mkfifo, spawns curl (upstream url) and ffmpeg (reads the fifo), returns the source url', async () => {
     const d = deps()
     const eng = createPlaybackEngine(d)
     const s = await eng.start(XT, item)
     expect(d.mkdir).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid')
-    const argv = (d.spawn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[]
-    expect(argv[0]).toBe('ffmpeg')
-    expect(argv).toContain('http://h:8080/live/u/p/7.ts')
-    expect(argv[argv.length - 1]).toBe('/home/u/.cache/inflighttv/sid/index.m3u8')
+    expect(d.mkfifo).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid/in.ts')
+
+    const calls = spawnArgs(d)
+    const curl = calls.find((a) => a[0] === 'curl')!
+    expect(curl).toContain('http://h:8080/live/u/p/7.ts') // curl fetches the upstream url
+    expect(curl).toContain('/home/u/.cache/inflighttv/sid/in.ts') // ...into the fifo
+
+    const ff = calls.find((a) => a[0] === 'ffmpeg')!
+    expect(ff).toContain('-i')
+    expect(ff).toContain('/home/u/.cache/inflighttv/sid/in.ts') // ffmpeg reads the fifo
+    expect(ff).not.toContain('http://h:8080/live/u/p/7.ts') // ffmpeg never touches the panel url
+    expect(ff[ff.length - 1]).toBe('/home/u/.cache/inflighttv/sid/index.m3u8')
+
     expect(s.sourceUrl).toBe('iftv://sid/index.m3u8')
-    expect(typeof s.createLoader()).toBe('function') // a loader class
+    expect(typeof s.createLoader()).toBe('function')
   })
 
   it('waits (polls) for the playlist to appear before returning', async () => {
@@ -43,12 +57,13 @@ describe('createPlaybackEngine.start', () => {
     expect(d.wait).toHaveBeenCalled()
   })
 
-  it('kills ffmpeg and cleans up if the playlist never appears', async () => {
+  it('kills BOTH curl and ffmpeg and cleans up if the playlist never appears', async () => {
     const close = vi.fn()
     const d = deps({ readFile: async () => null, spawn: () => ({ close }) })
     const eng = createPlaybackEngine(d)
     await expect(eng.start(XT, item)).rejects.toThrow(/did not start/i)
-    expect(close).toHaveBeenCalledWith(expect.any(String))
+    expect(close).toHaveBeenCalledWith('timeout')
+    expect(close).toHaveBeenCalledTimes(2) // curl + ffmpeg
     expect(d.rmrf).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid')
   })
 
@@ -59,13 +74,14 @@ describe('createPlaybackEngine.start', () => {
     expect(d.spawn).not.toHaveBeenCalled()
   })
 
-  it('stop() kills ffmpeg with a problem code and removes the dir', async () => {
+  it('stop() kills both processes with a problem code and removes the dir', async () => {
     const close = vi.fn()
     const d = deps({ spawn: () => ({ close }) })
     const eng = createPlaybackEngine(d)
     const s = await eng.start(XT, item)
     await s.stop()
     expect(close).toHaveBeenCalledWith('terminated')
+    expect(close).toHaveBeenCalledTimes(2) // curl + ffmpeg
     expect(d.rmrf).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid')
   })
 })

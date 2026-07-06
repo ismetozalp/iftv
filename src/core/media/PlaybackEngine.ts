@@ -19,6 +19,7 @@ export interface EngineDeps {
   home(): Promise<string>
   newId(): string
   mkdir(dir: string): Promise<void>
+  mkfifo(path: string): Promise<void>
   rmrf(dir: string): Promise<void>
   spawn(argv: string[]): FfmpegProc
   readFile(path: string): Promise<Uint8Array | null>

@@ -2,7 +2,7 @@ import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
 import type { EngineDeps, PlaybackEngine, PlaybackSession } from './PlaybackEngine'
 import { liveStreamUrl } from './streamUrl'
-import { buildLiveArgs } from './ffmpegArgs'
+import { buildCurlArgs, buildRemuxArgs, STREAM_USER_AGENT } from './ffmpegArgs'
 import { cacheRoot, sessionDir, playlistPath, segmentPattern, sourceUrl, resolveInDir } from './session'
 import { createCockpitLoaderClass } from './hlsLoader'
 
@@ -18,9 +18,18 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       const id = deps.newId()
       const dir = sessionDir(cacheRoot(await deps.home()), id)
       await deps.mkdir(dir)
+      const fifo = `${dir}/in.ts`
+      await deps.mkfifo(fifo)
 
-      const argv = ['ffmpeg', ...buildLiveArgs({ inputUrl, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir) })]
-      const proc = deps.spawn(argv)
+      // curl fetches the upstream (following the panel's cross-host 302 redirect, which ffmpeg
+      // stalls on for many Xtream panels) and writes it into the FIFO; ffmpeg reads the FIFO — a
+      // local input, so no redirect/HTTP quirks — and remuxes to a rolling HLS window.
+      const curl = deps.spawn(['curl', ...buildCurlArgs({ url: inputUrl, outPath: fifo, userAgent: STREAM_USER_AGENT })])
+      const ff = deps.spawn(['ffmpeg', ...buildRemuxArgs({ inputPath: fifo, playlistPath: playlistPath(dir), segmentPath: segmentPattern(dir) })])
+      const stopAll = (problem: string) => {
+        curl.close(problem)
+        ff.close(problem)
+      }
 
       const pl = playlistPath(dir)
       let ready = false
@@ -30,7 +39,7 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
         await deps.wait(PLAYLIST_INTERVAL_MS)
       }
       if (!ready) {
-        proc.close('timeout')
+        stopAll('timeout')
         await deps.rmrf(dir)
         throw new Error('Stream did not start (no playlist produced)')
       }
@@ -40,7 +49,7 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
         sourceUrl: sourceUrl(id),
         createLoader: () => Loader,
         async stop() {
-          proc.close('terminated')
+          stopAll('terminated')
           await deps.rmrf(dir)
         },
       }

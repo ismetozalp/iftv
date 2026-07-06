@@ -16,6 +16,7 @@ export async function createCockpitPlaybackEngine(): Promise<PlaybackEngine> {
     home: async () => user.home,
     newId: () => crypto.randomUUID(),
     mkdir: async (dir) => { await cockpit.spawn(['mkdir', '-p', dir]) },
+    mkfifo: async (path) => { await cockpit.spawn(['mkfifo', path]) },
     rmrf: async (dir) => { await cockpit.spawn(['rm', '-rf', dir]).catch(() => {}) },
     spawn: (argv) => cockpit.spawn(argv, { err: 'message' }) as unknown as { close(p: string): void },
     readFile: async (path) => {

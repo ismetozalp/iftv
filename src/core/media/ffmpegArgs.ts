@@ -1,22 +1,40 @@
-export interface LiveArgsInput {
-  inputUrl: string
+// User-agent for fetching the upstream stream. Some Xtream panels/CDNs gate on it.
+export const STREAM_USER_AGENT = 'VLC/3.0.20 LibVLC/3.0.20'
+
+export interface CurlArgsInput {
+  url: string
+  outPath: string // FIFO the stream is written into
+  userAgent: string
+}
+
+// curl fetches the upstream stream into a local FIFO. It follows cross-host 302 redirects
+// (which ffmpeg's HTTP demuxer stalls on for many Xtream panels) and retries a flaky source.
+export function buildCurlArgs({ url, outPath, userAgent }: CurlArgsInput): string[] {
+  return [
+    '-sL',
+    '--user-agent', userAgent,
+    '--connect-timeout', '15',
+    '--retry', '5',
+    '--retry-delay', '2',
+    '--retry-all-errors',
+    '-o', outPath,
+    url,
+  ]
+}
+
+export interface RemuxArgsInput {
+  inputPath: string // local FIFO fed by curl
   playlistPath: string
   segmentPath: string
 }
 
-// Remux video (cheap), transcode audio to AAC (browser-safe), rolling live HLS window.
+// ffmpeg reads the local FIFO (no network — no redirect/HTTP quirks), remuxes video and
+// transcodes audio to AAC into a rolling live HLS window.
 // (HEVC video needs a video transcode — deferred to Plan 3b.)
-export function buildLiveArgs({ inputUrl, playlistPath, segmentPath }: LiveArgsInput): string[] {
+export function buildRemuxArgs({ inputPath, playlistPath, segmentPath }: RemuxArgsInput): string[] {
   return [
     '-y',
-    // Disable HTTP keep-alive: some CDNs (and nested HLS/M3U upstreams) fail segment
-    // fetches with persistent connections; harmless for a direct MPEG-TS input.
-    '-http_persistent', '0',
-    '-reconnect', '1',
-    '-reconnect_streamed', '1',
-    '-reconnect_at_eof', '1',
-    '-reconnect_delay_max', '5',
-    '-i', inputUrl,
+    '-i', inputPath,
     '-c:v', 'copy',
     '-c:a', 'aac',
     '-b:a', '128k',
