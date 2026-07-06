@@ -3,10 +3,12 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import Hls from 'hls.js'
 import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
+import { useCollectionsStore } from '@/stores/collections'
 import { formatTime, clampFraction } from '@/core/media/seekbar'
 
 const player = usePlayerStore()
 const settings = useSettingsStore()
+const collections = useCollectionsStore()
 const video = ref<HTMLVideoElement | null>(null)
 const track = ref<HTMLElement | null>(null)
 const subTrack = ref<HTMLTrackElement | null>(null)
@@ -17,6 +19,12 @@ const paused = ref(false)
 let hls: Hls | null = null
 let subTimer: ReturnType<typeof setInterval> | null = null
 let subBlobUrl: string | null = null
+const PROGRESS_SAVE_MS = 15000
+
+// History (once per session) + progress (VOD only, periodic) auto-tracking. Both flags/timers are
+// owned by the main session watch below (armed/reset there), mirroring triedTranscode/watchdog.
+let recordedHistory = false // reset per session so History logs once per play(), not spammed
+let progressTimer: ReturnType<typeof setInterval> | null = null
 
 // Undecodable-video detection: hls.js may report a codec/decode error, or (rarely) never report
 // one while audio keeps advancing and the video track just never paints. Either path retries
@@ -54,8 +62,23 @@ const transcodeBadge = computed(() => {
   return 'No transcode needed'
 })
 
+function clearProgressTimer() {
+  if (progressTimer) { clearInterval(progressTimer); progressTimer = null }
+}
+
+// Persist the last known VOD position for the item that's ACTIVE right now. Safe to call whenever
+// teardown() runs (mid-session restart, close, or unmount) because play()/seek()/etc. always null
+// `session` — and thus fire this — BEFORE they touch `item`/`account`/`duration` for a new item, so
+// this always sees the outgoing item's own state, never a just-switched-to one.
+function saveProgressNow() {
+  if (!player.account || !player.item || player.duration == null || now.value <= 0) return
+  void collections.saveProgress(player.account, player.item, now.value, player.duration)
+}
+
 function teardown() {
   clearWatchdog()
+  saveProgressNow() // last-chance persist before the session/offsets reset below
+  clearProgressTimer()
   if (hls) { hls.destroy(); hls = null }
   buffering.value = false
   now.value = 0
@@ -104,7 +127,9 @@ watch(
     teardown()
     triedTranscode = false
     triedSoftwareFallback = false
+    recordedHistory = false
     if (!session || !video.value) return
+    if (player.duration != null) progressTimer = setInterval(saveProgressNow, PROGRESS_SAVE_MS) // VOD only — live has no meaningful "resume" offset
     if (Hls.isSupported()) {
       const Loader = session.createLoader() as never
       const bufferSeconds = settings.bufferSeconds || 30
@@ -151,6 +176,18 @@ watch(
       armWatchdog()
     } else if (video.value.canPlayType('application/vnd.apple.mpegurl')) {
       video.value.src = session.sourceUrl // native HLS (Safari) — fallback, unlikely for iftv://
+    }
+  },
+)
+
+// Log to History once per session, as soon as playback actually starts — driven off `status`
+// (rather than the hls.js-only MANIFEST_PARSED event) so it also covers the native-Safari fallback.
+watch(
+  () => player.status,
+  (status) => {
+    if (status === 'playing' && !recordedHistory && player.item && player.account) {
+      recordedHistory = true
+      void collections.recordHistory(player.account, player.item)
     }
   },
 )

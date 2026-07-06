@@ -6,6 +6,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useDetailStore } from '@/stores/detail'
 import { filterSortWatchLater, type WatchLaterFilter } from '@/core/library/library'
 import type { ContentItem } from '@/core/content/types'
+import type { ProgressEntry, HistoryEntry } from '@/core/library/types'
 import VirtualGrid from '@/components/VirtualGrid.vue'
 import ContentCard from '@/components/ContentCard.vue'
 
@@ -99,6 +100,50 @@ function removeFromSelectedList(item: ContentItem) {
   const account = ws.activeAccount
   if (!account || !selectedListId.value) return
   void collections.removeFromList(selectedListId.value, item.id, account.id)
+}
+
+// --- Continue watching ---
+const continueWatchingEntries = computed<ProgressEntry[]>(() => {
+  const account = ws.activeAccount
+  return account ? collections.continueWatchingOf(account.id) : []
+})
+function progressPct(e: ProgressEntry): number {
+  if (!e.durationSeconds || e.durationSeconds <= 0) return 0
+  return Math.min(100, Math.max(0, (e.offsetSeconds / e.durationSeconds) * 100))
+}
+function resumeEntry(e: ProgressEntry) {
+  const account = ws.activeAccount
+  if (!account) return
+  void player.play(account, e.item, { durationSeconds: e.durationSeconds, startOffsetSeconds: e.offsetSeconds })
+}
+function removeContinueWatching(e: ProgressEntry) {
+  const account = ws.activeAccount
+  if (!account) return
+  void collections.removeProgress(account.id, e.item.id)
+}
+
+// --- History ---
+const historyEntries = computed<HistoryEntry[]>(() => {
+  const account = ws.activeAccount
+  return account ? collections.historyOf(account.id) : []
+})
+function relativeTime(ts: number): string {
+  const sec = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+  if (sec < 60) return 'just now'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  if (day < 30) return `${day}d ago`
+  const mo = Math.floor(day / 30)
+  if (mo < 12) return `${mo}mo ago`
+  return `${Math.floor(mo / 12)}y ago`
+}
+async function onClearHistory() {
+  if (!historyEntries.value.length) return
+  if (!window.confirm('Clear all watch history?')) return
+  await collections.clearHistory()
 }
 </script>
 
@@ -198,12 +243,50 @@ function removeFromSelectedList(item: ContentItem) {
       </template>
     </section>
 
-    <section v-else-if="tab === 'continue'" class="p-2">
-      <p class="text-muted">Continue Watching is coming in the next step.</p>
+    <section v-else-if="tab === 'continue'" class="iftv-grid-wrap flex-fill">
+      <p v-if="!continueWatchingEntries.length" class="text-muted p-2">Nothing in progress.</p>
+      <VirtualGrid v-else :items="continueWatchingEntries" :item-width="150" :item-height="230">
+        <template #default="{ item }">
+          <div class="iftv-cw-cell">
+            <ContentCard
+              :item="(item as ProgressEntry).item"
+              context="library"
+              @click="resumeEntry(item as ProgressEntry)"
+              @remove="removeContinueWatching(item as ProgressEntry)"
+            />
+            <div class="iftv-cw-progress">
+              <div class="iftv-cw-progress-bar" :style="{ width: progressPct(item as ProgressEntry) + '%' }"></div>
+            </div>
+          </div>
+        </template>
+      </VirtualGrid>
     </section>
 
-    <section v-else-if="tab === 'history'" class="p-2">
-      <p class="text-muted">History is coming in the next step.</p>
+    <section v-else-if="tab === 'history'" class="p-2 flex-fill d-flex flex-column">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0">History</h5>
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-danger"
+          :disabled="!historyEntries.length"
+          @click="onClearHistory"
+        >
+          Clear history
+        </button>
+      </div>
+      <p v-if="!historyEntries.length" class="text-muted p-2">No history yet.</p>
+      <ul v-else class="list-group iftv-history-list overflow-auto flex-fill">
+        <li
+          v-for="(h, i) in historyEntries"
+          :key="h.accountId + ':' + h.item.id + ':' + i"
+          class="list-group-item d-flex justify-content-between align-items-center"
+          role="button"
+          @click="onPlay(h.item)"
+        >
+          <span class="text-truncate">{{ h.item.name }}</span>
+          <span class="text-muted small ms-2 flex-shrink-0">{{ relativeTime(h.watchedAt) }}</span>
+        </li>
+      </ul>
     </section>
   </div>
 </template>
