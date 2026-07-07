@@ -43,7 +43,23 @@ describe('useSettingsStore', () => {
       cacheLimitGb: 5,
       epgUrl: DEFAULT_EPG_URL,
       themeMode: 'system',
+      updateRepo: 'ismetozalp/iftv',
     })
+  })
+
+  it('updateRepo defaults to ismetozalp/iftv and persists a change', async () => {
+    const store = createMemoryStore()
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    expect(s.updateRepo).toBe('ismetozalp/iftv')
+    await s.setUpdateRepo('me/fork')
+    expect(s.updateRepo).toBe('me/fork')
+    const persisted = await store.load('settings.json', { updateRepo: '' })
+    expect((persisted as { updateRepo: string }).updateRepo).toBe('me/fork')
+    // blank falls back to the default
+    await s.setUpdateRepo('   ')
+    expect(s.updateRepo).toBe('ismetozalp/iftv')
   })
 
   it('setBufferSeconds clamps values below 5 up to 5', async () => {

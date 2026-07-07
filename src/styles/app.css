@@ -131,3 +131,4 @@ body { margin: 0; }
 .iftv-detail-poster img { max-width: 100%; max-height: 100%; object-fit: cover; width: 100%; height: 100%; }
 .iftv-detail-poster-fallback { font-size: 2rem; font-weight: 600; color: var(--bs-secondary); }
 .iftv-detail-info { min-width: 0; }
+.iftv-update-log { max-height: 180px; overflow: auto; background: var(--bs-tertiary-bg); padding: 0.5rem; border-radius: 0.3rem; white-space: pre-wrap; }

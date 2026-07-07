@@ -4,6 +4,7 @@ import cockpit from 'cockpit'
 import { useSettingsStore, DEFAULT_EPG_URL } from '@/stores/settings'
 import { usePlayerStore } from '@/stores/player'
 import { useEpgStore } from '@/stores/epg'
+import { useUpdaterStore } from '@/stores/updater'
 import { resolveCacheRoot } from '@/core/media/session'
 import { cacheSizeBytes, clearCache } from '@/adapters/cockpitCache'
 import { gatherFiles, restoreFiles, downloadTextFile, readUploadedFile } from '@/adapters/cockpitBackup'
@@ -18,6 +19,7 @@ const emit = defineEmits<{ close: [] }>()
 const settings = useSettingsStore()
 const player = usePlayerStore()
 const epg = useEpgStore()
+const updater = useUpdaterStore()
 
 function onInput(e: Event) {
   const n = Number((e.target as HTMLInputElement).value)
@@ -349,6 +351,40 @@ function close() {
           Keep this file and its password safe — it holds your account credentials (encrypted) and a lost password
           can't be recovered.
         </small>
+      </div>
+      <div class="mt-3">
+        <h5>Plugin update</h5>
+        <label for="iftv-update-repo" class="form-label">GitHub repo (owner/repo)</label>
+        <div class="d-flex align-items-center gap-2">
+          <input
+            id="iftv-update-repo"
+            class="form-control"
+            placeholder="ismetozalp/iftv"
+            v-model="settings.updateRepo"
+            @change="settings.setUpdateRepo(settings.updateRepo)"
+          />
+          <button
+            id="iftv-update-check"
+            class="btn btn-sm btn-outline-secondary"
+            :disabled="updater.checking || updater.installing"
+            @click="updater.check(true)"
+          >
+            {{ updater.checking ? 'Checking…' : 'Check for updates' }}
+          </button>
+          <button
+            v-if="updater.available"
+            class="btn btn-sm btn-primary"
+            :disabled="updater.installing"
+            @click="updater.update()"
+          >
+            {{ updater.installing ? 'Updating…' : `Update to v${updater.latest?.version} & restart Cockpit` }}
+          </button>
+        </div>
+        <small class="text-muted">Installed version: <strong>v{{ updater.current || '?' }}</strong></small>
+        <div class="text-success small" v-if="updater.available">Update available: v{{ updater.latest?.version }}.</div>
+        <div class="text-muted small" v-else-if="updater.latest && !updater.checking">You are up to date (v{{ updater.current }}).</div>
+        <div class="text-danger small" v-if="updater.error">{{ updater.error }}</div>
+        <pre v-if="updater.log.length" class="iftv-update-log small mt-2">{{ updater.log.join('\n') }}</pre>
       </div>
     </div>
   </div>
