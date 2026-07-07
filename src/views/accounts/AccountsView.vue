@@ -45,7 +45,12 @@ async function openAccount(id: string) {
 </script>
 
 <template>
-  <div class="row g-4">
+  <div>
+    <div class="d-flex align-items-center gap-3 mb-3">
+      <button class="btn btn-sm btn-outline-secondary" @click="router.push('/')">&larr; Back to watching</button>
+      <h4 class="mb-0">Manage accounts</h4>
+    </div>
+    <div class="row g-4">
     <div class="col-md-5">
       <h5>Add account</h5>
       <AccountForm :busy="busy" :error="error" @submit="onAdd" />
@@ -73,6 +78,7 @@ async function openAccount(id: string) {
           </li>
         </template>
       </ul>
+    </div>
     </div>
   </div>
 </template>

@@ -1,6 +1,13 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useWorkspaceStore } from '@/stores/workspace'
 const ws = useWorkspaceStore()
+const router = useRouter()
+// Activating a tab also returns to the browse, so tabs double as the way out of Accounts/Settings.
+function selectTab(id: string) {
+  ws.activate(id)
+  if (router.currentRoute.value.path !== '/') router.push('/')
+}
 </script>
 
 <template>
@@ -10,7 +17,7 @@ const ws = useWorkspaceStore()
       :key="acc.id"
       class="iftv-tab"
       :class="{ active: acc.id === ws.tabs.activeTabId }"
-      @click="ws.activate(acc.id)"
+      @click="selectTab(acc.id)"
     >
       <span class="iftv-tab-label">{{ acc.name }}</span>
       <button class="iftv-tab-close" title="Close tab" @click.stop="ws.close(acc.id)">×</button>
