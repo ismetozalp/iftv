@@ -55,8 +55,10 @@ included, and this project is not affiliated with any provider.
 
 ## Screenshots
 
-> Real screenshots. The actual video image is intentionally replaced with a
-> **"video appears here"** placeholder — no stream content is shown.
+> Real screenshots (dark theme), with identifying content anonymized: account and
+> channel names are generic ("Account 1", "Channel 1"…), channel logos show a
+> **"channel poster here"** placeholder, and the video image is replaced with
+> **"video appears here"** — no real stream, provider, or account details are shown.
 
 **Live TV — channel grid with now/next EPG**
 
