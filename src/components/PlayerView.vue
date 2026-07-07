@@ -45,6 +45,11 @@ let triedTranscode = false // copy → transcode, once per session
 let triedSoftwareFallback = false // nvenc → x264, once per session
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null
 
+// Debounce the buffering indicator: only show it if a stall actually lasts, so the constant
+// sub-second micro-stalls of a live stream don't flicker the spinner on and off.
+let bufferTimer: ReturnType<typeof setTimeout> | null = null
+const BUFFER_SHOW_MS = 800
+
 // Presentation: this account's slot is visible (and unmuted) only while its tab is the active one.
 // Non-active accounts keep playing (muted, off-screen) so switching tabs is instant. `minimized`
 // docks THIS account's own video to the bottom bar (Task 3); `full` is the normal overlay chrome.
@@ -100,7 +105,7 @@ function teardown() {
   saveProgressNow() // last-chance persist before the session/offsets reset below
   clearProgressTimer()
   if (hls) { hls.destroy(); hls = null }
-  buffering.value = false
+  clearBuffering() // cancels any pending debounce timer + hides the spinner
   now.value = 0
   bufferedEnd.value = 0
   paused.value = false
@@ -236,11 +241,25 @@ function updatePlayhead() {
   nowMs.value = Date.now()
 }
 
-// `timeupdate` fires only when the playback position advances — i.e. we ARE playing, not buffering.
-// `buffering` is otherwise a latch cleared only by @playing/@canplay, which don't re-fire when the
-// video silently resumes (e.g. after being hidden on another account's tab), so clear it here too.
-function onTimeupdate() {
+// A stall (@waiting/@stalled) arms a timer; the spinner only shows if the stall outlasts it.
+// Any sign of playback (timeupdate advancing, playing, canplay) cancels it and hides the spinner —
+// so momentary hiccups never flicker the indicator, and it never sticks once playback resumes.
+function armBuffering() {
+  if (bufferTimer || buffering.value) return
+  bufferTimer = setTimeout(() => {
+    bufferTimer = null
+    buffering.value = true
+  }, BUFFER_SHOW_MS)
+}
+function clearBuffering() {
+  if (bufferTimer) {
+    clearTimeout(bufferTimer)
+    bufferTimer = null
+  }
   if (buffering.value) buffering.value = false
+}
+function onTimeupdate() {
+  clearBuffering() // currentTime advanced ⇒ actively playing
   updatePlayhead()
 }
 
@@ -316,10 +335,10 @@ function onScrub(e: MouseEvent) {
         :muted="!isActive"
         autoplay
         playsinline
-        @waiting="buffering = true"
-        @stalled="buffering = true"
-        @playing="buffering = false"
-        @canplay="buffering = false"
+        @waiting="armBuffering"
+        @stalled="armBuffering"
+        @playing="clearBuffering"
+        @canplay="clearBuffering"
         @timeupdate="onTimeupdate"
         @progress="updatePlayhead"
         @play="paused = false"
