@@ -9,9 +9,9 @@ import type { ContentItem } from '@/core/content/types'
 
 const ACCT: Account = { id: 'a', type: 'xtream', name: 'X', url: 'http://h', username: 'u', password: 'p', createdAt: 1 }
 const ACCT2: Account = { id: 'b', type: 'xtream', name: 'Y', url: 'http://h2', username: 'u2', password: 'p2', createdAt: 2 }
-const item: ContentItem = { id: 'x:live:1', kind: 'live', name: 'CNN', logo: '', categoryId: '1', streamId: '1', seriesId: null, containerExtension: null, url: null }
+const item: ContentItem = { id: 'x:live:1', kind: 'live', name: 'CNN', logo: '', epgId: '', categoryId: '1', streamId: '1', seriesId: null, containerExtension: null, url: null }
 
-const MOVIE: ContentItem = { id: 'x:movie:9', kind: 'movie', name: 'A Movie', logo: '', categoryId: '1', streamId: '9', seriesId: null, containerExtension: 'mkv', url: null }
+const MOVIE: ContentItem = { id: 'x:movie:9', kind: 'movie', name: 'A Movie', logo: '', epgId: '', categoryId: '1', streamId: '9', seriesId: null, containerExtension: 'mkv', url: null }
 
 function engineWith(session: Partial<PlaybackSession> = {}): { engine: PlaybackEngine; stop: ReturnType<typeof vi.fn> } {
   const stop = vi.fn(async () => {})

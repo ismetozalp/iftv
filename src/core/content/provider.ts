@@ -12,6 +12,7 @@ export interface ContentProvider {
   getCategories(): Promise<Category[]>
   getItems(categoryId: string): Promise<ContentItem[]>
   getAllItems(): Promise<ContentItem[]>
+  getTvgUrl(): Promise<string> // the M3U's declared `url-tvg` (own guide); '' for Xtream
 }
 
 type Cats = (t: XtreamTransport, url: string, u: string, p: string) => Promise<Category[]>
@@ -34,11 +35,12 @@ export function createXtreamProvider(t: XtreamTransport, account: Account, secti
       if (!allCache) allCache = await items(t, url, username, password)
       return allCache
     },
+    getTvgUrl: async () => '',
   }
 }
 
 export function createM3uProvider(t: XtreamTransport, account: Account): ContentProvider {
-  let parsed: { categories: Category[]; items: ContentItem[] } | null = null
+  let parsed: { categories: Category[]; items: ContentItem[]; tvgUrl: string } | null = null
   async function ensure() {
     if (!parsed) parsed = parseM3u(await t.fetchText(account.url))
     return parsed
@@ -53,11 +55,15 @@ export function createM3uProvider(t: XtreamTransport, account: Account): Content
     async getAllItems() {
       return (await ensure()).items
     },
+    async getTvgUrl() {
+      return (await ensure()).tvgUrl
+    },
   }
 }
 
 const EMPTY_PROVIDER: ContentProvider = {
   getCategories: async () => [],
+  getTvgUrl: async () => '',
   getItems: async () => [],
   getAllItems: async () => [],
 }

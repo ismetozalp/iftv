@@ -6,8 +6,8 @@ import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
 
 const ACCT: Account = { id: 'a', type: 'xtream', name: 'X', url: 'http://h:8080', username: 'u', password: 'p', createdAt: 1 }
-const MOVIE: ContentItem = { id: 'x:movie:99', kind: 'movie', name: 'The Movie', logo: '', categoryId: '1', streamId: '99', seriesId: null, containerExtension: null, url: null }
-const SERIES: ContentItem = { id: 'x:series:55', kind: 'series', name: 'The Series', logo: '', categoryId: '1', streamId: null, seriesId: '55', containerExtension: null, url: null }
+const MOVIE: ContentItem = { id: 'x:movie:99', kind: 'movie', name: 'The Movie', logo: '', epgId: '', categoryId: '1', streamId: '99', seriesId: null, containerExtension: null, url: null }
+const SERIES: ContentItem = { id: 'x:series:55', kind: 'series', name: 'The Series', logo: '', epgId: '', categoryId: '1', streamId: null, seriesId: '55', containerExtension: null, url: null }
 
 function fakeTransport(payload: unknown): XtreamTransport {
   return { getJson: vi.fn(async () => payload), fetchText: vi.fn(async () => '') }

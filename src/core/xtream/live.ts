@@ -31,6 +31,7 @@ export async function getLiveStreams(
         kind: 'live' as const,
         name: toStr(r.name),
         logo: toStr(r.stream_icon),
+        epgId: toStr(r.epg_channel_id),
         categoryId: toStr(r.category_id),
         streamId: streamId || null,
         seriesId: null,

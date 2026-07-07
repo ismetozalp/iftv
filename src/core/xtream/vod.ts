@@ -32,6 +32,7 @@ export async function getVodStreams(
         kind: 'movie' as const,
         name: toStr(r.name),
         logo: toStr(r.stream_icon),
+        epgId: '',
         categoryId: toStr(r.category_id),
         streamId: streamId || null,
         seriesId: null,

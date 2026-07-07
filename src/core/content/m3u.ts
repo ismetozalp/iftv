@@ -17,17 +17,21 @@ function displayName(line: string): string {
   return ''
 }
 
-export function parseM3u(text: string): { categories: Category[]; items: ContentItem[] } {
+export function parseM3u(text: string): { categories: Category[]; items: ContentItem[]; tvgUrl: string } {
   const items: ContentItem[] = []
   const order: string[] = []
   const seen = new Set<string>()
-  let pending: { name: string; logo: string; group: string } | null = null
+  let tvgUrl = ''
+  let pending: { name: string; logo: string; group: string; epgId: string } | null = null
 
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim()
-    if (line.startsWith('#EXTINF')) {
+    if (line.startsWith('#EXTM3U')) {
+      // The playlist may declare its own guide in the header.
+      tvgUrl = attr(line, 'url-tvg') || attr(line, 'x-tvg-url') || tvgUrl
+    } else if (line.startsWith('#EXTINF')) {
       const name = displayName(line) || attr(line, 'tvg-name') || 'Unnamed'
-      pending = { name, logo: attr(line, 'tvg-logo'), group: attr(line, 'group-title') || 'Uncategorized' }
+      pending = { name, logo: attr(line, 'tvg-logo'), group: attr(line, 'group-title') || 'Uncategorized', epgId: attr(line, 'tvg-id') }
     } else if (line !== '' && !line.startsWith('#') && pending) {
       if (!seen.has(pending.group)) { seen.add(pending.group); order.push(pending.group) }
       items.push({
@@ -35,6 +39,7 @@ export function parseM3u(text: string): { categories: Category[]; items: Content
         kind: 'live',
         name: pending.name,
         logo: pending.logo,
+        epgId: pending.epgId,
         categoryId: pending.group,
         streamId: null,
         seriesId: null,
@@ -45,5 +50,5 @@ export function parseM3u(text: string): { categories: Category[]; items: Content
     }
   }
 
-  return { categories: order.map((g) => ({ id: g, name: g })), items }
+  return { categories: order.map((g) => ({ id: g, name: g })), items, tvgUrl }
 }

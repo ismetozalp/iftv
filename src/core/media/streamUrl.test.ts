@@ -6,7 +6,7 @@ import type { ContentItem } from '@/core/content/types'
 const XT: Account = { id: 'a', type: 'xtream', name: 'X', url: 'http://host:8080', username: 'u', password: 'p', createdAt: 1 }
 const M3: Account = { id: 'b', type: 'm3u', name: 'M', url: 'http://h/list.m3u', username: '', password: '', createdAt: 2 }
 function live(over: Partial<ContentItem> = {}): ContentItem {
-  return { id: 'x:live:1', kind: 'live', name: 'C', logo: '', categoryId: '1', streamId: '1', seriesId: null, containerExtension: null, url: null, ...over }
+  return { id: 'x:live:1', kind: 'live', name: 'C', logo: '', epgId: '', categoryId: '1', streamId: '1', seriesId: null, containerExtension: null, url: null, ...over }
 }
 
 describe('playbackUrl', () => {

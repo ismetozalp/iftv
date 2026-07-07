@@ -10,6 +10,7 @@ export interface ContentItem {
   kind: ContentKind
   name: string
   logo: string // live logo or movie/series poster; '' if none
+  epgId: string // live EPG channel id (Xtream epg_channel_id / M3U tvg-id); '' if none/non-live
   categoryId: string
   streamId: string | null // live/movie stream id (play URL, Plan 3)
   seriesId: string | null // series id (series detail, Plan 3)
