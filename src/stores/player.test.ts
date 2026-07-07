@@ -144,6 +144,25 @@ describe('usePlayerStore', () => {
     expect(engine.start).toHaveBeenLastCalledWith(ACCT, MOVIE, expect.objectContaining({ startOffsetSeconds: 1200 }))
   })
 
+  it('restartStalled() reconnects a LIVE session (stop→settle→start); no-op for VOD', async () => {
+    const order: string[] = []
+    const stop = vi.fn(async () => { order.push('stop') })
+    const engine: PlaybackEngine = {
+      start: vi.fn(async () => { order.push('start'); return { sourceUrl: 's', isLive: true, createLoader: () => class {}, stop, readSubtitle: async () => null } }),
+    }
+    const p = usePlayerStore()
+    p.$configure({ engine, sleep: async () => { order.push('settle') } })
+    await p.play(ACCT, item) // live (no durationSeconds → duration null)
+    order.length = 0
+    await p.restartStalled(ACCT)
+    expect(order).toEqual(['stop', 'settle', 'start']) // reconnected at the edge
+
+    await p.play(ACCT, MOVIE, { durationSeconds: 100 }) // VOD
+    order.length = 0
+    await p.restartStalled(ACCT)
+    expect(order).toEqual([]) // finite-duration VOD is not treated as a live stall
+  })
+
   it('seek() clamps to [0, duration]', async () => {
     const { engine } = engineWith()
     const p = usePlayerStore()

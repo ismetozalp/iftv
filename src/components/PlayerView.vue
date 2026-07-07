@@ -50,6 +50,14 @@ let watchdogTimer: ReturnType<typeof setTimeout> | null = null
 let bufferTimer: ReturnType<typeof setTimeout> | null = null
 const BUFFER_SHOW_MS = 800
 
+// Live-stall recovery: poll the playhead; if a playing LIVE stream stops advancing for this long
+// (the upstream dropped → the HLS playlist stopped updating → hls.js is stuck), reconnect at the edge.
+let stallTimer: ReturnType<typeof setInterval> | null = null
+let stallLastTime = 0
+let stallLastAdvanceMs = 0
+const STALL_CHECK_MS = 4000
+const STALL_RESTART_MS = 12000
+
 // Presentation: this account's slot is visible (and unmuted) only while its tab is the active one.
 // Non-active accounts keep playing (muted, off-screen) so switching tabs is instant. `minimized`
 // docks THIS account's own video to the bottom bar (Task 3); `full` is the normal overlay chrome.
@@ -58,7 +66,38 @@ const full = computed(() => isActive.value && !!slot.value && !slot.value.minimi
 const minimizedActive = computed(() => isActive.value && !!slot.value && slot.value.minimized)
 
 function clearWatchdog() {
+  // Does NOT clear the stall watch: `loadeddata`→onLoadedData calls this to retire the one-shot
+  // undecodable-video watchdog, but the live-stall watch must keep running for the whole session.
   if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null }
+}
+
+function clearStallWatch() {
+  if (stallTimer) { clearInterval(stallTimer); stallTimer = null }
+}
+function armStallWatch() {
+  clearStallWatch()
+  stallLastTime = video.value?.currentTime ?? 0
+  stallLastAdvanceMs = Date.now()
+  stallTimer = setInterval(() => {
+    const s = slot.value
+    const v = video.value
+    // Only watch an actively-playing LIVE stream: paused / starting / VOD (finite duration, whose
+    // EOF is a legitimate end) are not stalls — keep the timer reset in those states.
+    if (!s || !v || s.status !== 'playing' || s.duration != null || v.paused) {
+      stallLastTime = v?.currentTime ?? 0
+      stallLastAdvanceMs = Date.now()
+      return
+    }
+    if (v.currentTime > stallLastTime + 0.25) {
+      stallLastTime = v.currentTime
+      stallLastAdvanceMs = Date.now()
+      return
+    }
+    if (Date.now() - stallLastAdvanceMs > STALL_RESTART_MS) {
+      stallLastAdvanceMs = Date.now() // debounce until the restart re-arms this watch on the new session
+      void player.restartStalled(s.account)
+    }
+  }, STALL_CHECK_MS)
 }
 
 function armWatchdog() {
@@ -102,6 +141,7 @@ function saveProgressNow() {
 
 function teardown() {
   clearWatchdog()
+  clearStallWatch()
   saveProgressNow() // last-chance persist before the session/offsets reset below
   clearProgressTimer()
   if (hls) { hls.destroy(); hls = null }
@@ -203,6 +243,7 @@ watch(
       hls.attachMedia(video.value)
       hls.on(Hls.Events.MANIFEST_PARSED, () => { void video.value?.play().catch(() => {}) })
       armWatchdog()
+      armStallWatch()
     } else if (video.value.canPlayType('application/vnd.apple.mpegurl')) {
       video.value.src = session.sourceUrl // native HLS (Safari) — fallback, unlikely for iftv://
     }

@@ -272,6 +272,16 @@ export const usePlayerStore = defineStore('player', {
       }
       await this._restart(slot, { offsetSeconds: slot.startOffset, setTranscode: true })
     },
+    // Live-stall recovery: many Xtream panels close a live stream after a while (a clean EOF), so
+    // curl exits, ffmpeg's FIFO input ends, the HLS playlist stops updating and hls.js stalls
+    // buffering forever. Reconnect at the live edge. LIVE only (a VOD stall is a legitimate EOF).
+    // Same single-flight mutex+gen discipline as seek/retry — never overlaps a play/seek/stop.
+    async restartStalled(account: Account | null = useWorkspaceStore().activeAccount) {
+      if (!account) return
+      const slot = this._slot(account)
+      if (slot.status !== 'playing' || !slot.item || slot.duration != null) return
+      await this._restart(slot, { offsetSeconds: slot.startOffset })
+    },
     // Mid-stream / runtime GPU failure recovery: if the active session is transcoding on nvenc and
     // it fails after start, restart on software (x264). Sticky (_forceSoftware) so seeks stay on
     // software too. Same single-flight discipline as seek/retry — never overlaps another op.
