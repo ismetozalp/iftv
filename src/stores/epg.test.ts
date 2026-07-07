@@ -129,6 +129,28 @@ describe('useEpgStore (per-account)', () => {
     expect(calls).toBe(0)
   })
 
+  it('refetches when the resolved URL changes (M3U url-tvg becomes known), even if not TTL-stale', async () => {
+    const store = createMemoryStore()
+    const { useSettingsStore } = await import('./settings')
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    await s.setEpgUrl('http://global') // global fallback
+    const e = useEpgStore()
+    e.$configure({ store, fetchXml: async (url) => (url === 'http://tvg' ? SAMPLE_XML : OTHER_XML) })
+    const acct: Account = { id: 'm', type: 'm3u', name: 'M', url: 'http://h/m.m3u', username: '', password: '', createdAt: 1 }
+    // First load: no url-tvg yet → resolves to the global fallback (CNN feed).
+    await e.refresh(acct)
+    expect(e.hasEpgFor('CNN', '', 'm')).toBe(true)
+    expect(e.hasEpgFor('TRT1', '', 'm')).toBe(false)
+    // The playlist's own url-tvg becomes known → the resolved URL changes; ensureFresh must refetch
+    // even though the cache is NOT stale.
+    e.tvgUrlByAccount = { ...e.tvgUrlByAccount, m: 'http://tvg' }
+    await e.ensureFresh(acct, e.loadedAtFor('m') + 1000)
+    expect(e.hasEpgFor('TRT1', '', 'm')).toBe(true) // now the playlist's own guide
+    expect(e.hasEpgFor('CNN', '', 'm')).toBe(false)
+  })
+
   it('guideChannels lists only channels with EPG (by id or name) for the given account', async () => {
     const store = createMemoryStore()
     const e = useEpgStore()

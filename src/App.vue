@@ -38,14 +38,15 @@ async function confirmUpdate() {
 // Header height varies (tabs wrap with many accounts), so publish it as a CSS var the player reads.
 const headerEl = ref<HTMLElement>()
 onMounted(() => {
-  void ws.init()
-  void settings.load()
   void collections.load()
-  // EPG is per-account now: rebuild every account's cached index, then refresh each open account
-  // (each resolves its own guide — manual URL / panel xmltv.php / M3U url-tvg / global fallback).
-  void epg.load().then(() => {
-    for (const acc of ws.openTabs) void epg.ensureFresh(acc)
-  })
+  // EPG is per-account now: wait for accounts/tabs + settings (both feed URL resolution), rebuild
+  // every account's cached index, then refresh each OPEN account (each resolves its own guide —
+  // manual URL / panel xmltv.php / M3U url-tvg / global fallback).
+  void Promise.all([ws.init(), settings.load()])
+    .then(() => epg.load())
+    .then(() => {
+      for (const acc of ws.openTabs) void epg.ensureFresh(acc)
+    })
   const stopTheme = initTheme(() => settings.themeMode)
   onBeforeUnmount(stopTheme)
   if (headerEl.value) {

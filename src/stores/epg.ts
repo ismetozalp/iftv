@@ -41,7 +41,10 @@ export const useEpgStore = defineStore('epg', {
   state: () => ({
     byAccount: {} as Record<string, AccountEpg>,
     tvgUrlByAccount: {} as Record<string, string>, // M3U `url-tvg` captured when the playlist is parsed
+    srcByAccount: {} as Record<string, string>, // the resolved URL that produced each account's current index
     loadingIds: [] as string[],
+    _refreshAgain: [] as string[], // account ids asked to refresh while one was already in flight
+    _writeChain: Promise.resolve() as Promise<unknown>, // serializes epg.json read-modify-write
     nowMs: Date.now(), // ticked ~1/min from App.vue so now/next getters stay fresh between refreshes
     _deps: null as Deps | null,
   }),
@@ -71,11 +74,15 @@ export const useEpgStore = defineStore('epg', {
       }
       this.byAccount = byAccount
     },
-    async _persistAccount(id: string, loadedAt: number, channels: XmltvChannel[], programmes: Programme[]) {
-      const { store } = await this._host()
-      const all = await store.load('epg.json', {} as PersistedByAccount)
-      all[id] = { loadedAt, channels, programmes }
-      await store.save('epg.json', all)
+    // Serialized read-modify-write so concurrent per-account refreshes can't clobber epg.json.
+    _persistAccount(id: string, loadedAt: number, channels: XmltvChannel[], programmes: Programme[]) {
+      this._writeChain = this._writeChain.then(async () => {
+        const { store } = await this._host()
+        const all = await store.load('epg.json', {} as PersistedByAccount)
+        all[id] = { loadedAt, channels, programmes }
+        await store.save('epg.json', all)
+      })
+      return this._writeChain
     },
     // Record a playlist's declared `url-tvg`; refresh that account if it changes the resolved URL.
     async noteTvgUrl(accountId: string, url: string) {
@@ -89,12 +96,18 @@ export const useEpgStore = defineStore('epg', {
     async refresh(account: Account | null = useWorkspaceStore().activeAccount) {
       if (!account) return
       const id = account.id
-      if (this.loadingIds.includes(id)) return
+      // Single-flight per account. If a refresh is requested while one is running (e.g. the resolved
+      // URL just changed via noteTvgUrl), remember to run once more when it finishes.
+      if (this.loadingIds.includes(id)) {
+        if (!this._refreshAgain.includes(id)) this._refreshAgain = [...this._refreshAgain, id]
+        return
+      }
       this.loadingIds = [...this.loadingIds, id]
       try {
         const { fetchXml } = await this._host()
         const settings = useSettingsStore()
         const url = resolveEpgUrl(account, settings.epgUrl, this.tvgUrlByAccount[id] ?? '')
+        this.srcByAccount = { ...this.srcByAccount, [id]: url } // record what the current state reflects
         if (!url) {
           this.byAccount = { ...this.byAccount, [id]: { index: EMPTY_INDEX, loadedAt: Date.now(), error: '' } }
           await this._persistAccount(id, Date.now(), [], [])
@@ -113,15 +126,22 @@ export const useEpgStore = defineStore('epg', {
         }
       } finally {
         this.loadingIds = this.loadingIds.filter((x) => x !== id)
+        if (this._refreshAgain.includes(id)) {
+          this._refreshAgain = this._refreshAgain.filter((x) => x !== id)
+          void this.refresh(account) // resolves the URL afresh (now incl. any newly-known tvgUrl)
+        }
       }
     },
-    // Refresh an account only when it has a resolvable EPG URL and its cache is older than the TTL.
+    // Refresh an account when its cache is stale OR its resolved EPG URL changed (e.g. an M3U's
+    // url-tvg became known after the playlist parsed, or the account's manual URL was edited).
     async ensureFresh(account: Account | null = useWorkspaceStore().activeAccount, now = Date.now()) {
       if (!account) return
       const settings = useSettingsStore()
       const url = resolveEpgUrl(account, settings.epgUrl, this.tvgUrlByAccount[account.id] ?? '')
       if (!url) return
-      if (now - (this.byAccount[account.id]?.loadedAt ?? 0) > EPG_TTL_MS) await this.refresh(account)
+      const stale = now - (this.byAccount[account.id]?.loadedAt ?? 0) > EPG_TTL_MS
+      const urlChanged = url !== this.srcByAccount[account.id]
+      if (stale || urlChanged) await this.refresh(account)
     },
   },
   getters: {
