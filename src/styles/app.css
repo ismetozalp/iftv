@@ -85,6 +85,9 @@ body { margin: 0; }
 .iftv-player-title { flex: 1; font-weight: 600; }
 .iftv-player-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; }
 .iftv-player-video { max-width: 100%; max-height: 100%; background: #000; }
+/* Non-active accounts (PlayerHost mounts one PlayerView per playing account) stay mounted so the
+   <video>+hls session keeps decoding/playing uninterrupted — just moved off-screen, never display:none. */
+.iftv-player.iftv-player-hidden { position: fixed; inset: auto; left: -9999px; top: 0; width: 320px; height: 180px; opacity: 0; pointer-events: none; z-index: -1; }
 .iftv-track-select { max-width: 9rem; }
 .iftv-transcoding {
   font-size: 0.75rem; color: #cde; background: rgba(255, 255, 255, 0.08);

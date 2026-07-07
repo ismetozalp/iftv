@@ -5,12 +5,21 @@ import { usePlayerStore } from '@/stores/player'
 import { useSettingsStore } from '@/stores/settings'
 import { useCollectionsStore } from '@/stores/collections'
 import { useEpgStore } from '@/stores/epg'
+import { useWorkspaceStore } from '@/stores/workspace'
 import { formatTime, clampFraction } from '@/core/media/seekbar'
+
+// One PlayerView per playing account (mounted by PlayerHost). Everything below reads/writes THIS
+// account's slot only — never the global back-compat proxies — so N accounts can each run their
+// own <video>+hls session concurrently, fully independent of one another.
+const props = defineProps<{ accountId: string }>()
 
 const player = usePlayerStore()
 const settings = useSettingsStore()
 const collections = useCollectionsStore()
 const epg = useEpgStore()
+const ws = useWorkspaceStore()
+const slot = computed(() => player.slots[props.accountId])
+
 const video = ref<HTMLVideoElement | null>(null)
 const track = ref<HTMLElement | null>(null)
 const subTrack = ref<HTMLTrackElement | null>(null)
@@ -36,6 +45,13 @@ let triedTranscode = false // copy → transcode, once per session
 let triedSoftwareFallback = false // nvenc → x264, once per session
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null
 
+// Presentation: this account's slot is visible (and unmuted) only while its tab is the active one.
+// Non-active accounts keep playing (muted, off-screen) so switching tabs is instant. `minimized`
+// docks THIS account's own video to the bottom bar (Task 3); `full` is the normal overlay chrome.
+const isActive = computed(() => props.accountId === ws.activeAccount?.id)
+const full = computed(() => isActive.value && !!slot.value && !slot.value.minimized && slot.value.status !== 'idle')
+const minimizedActive = computed(() => isActive.value && !!slot.value && slot.value.minimized)
+
 function clearWatchdog() {
   if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null }
 }
@@ -45,11 +61,11 @@ function armWatchdog() {
   watchdogTimer = setTimeout(() => {
     watchdogTimer = null
     const v = video.value
-    if (!v) return
+    if (!v || !slot.value) return
     const hasVideoTrack = hls?.levels?.some((l) => l.videoCodec) ?? false
     if (!(hasVideoTrack && v.currentTime > 0 && v.videoWidth === 0)) return // audio-only or decoding fine
-    if (!player.transcode && !triedTranscode && settings.transcodeMode !== 'off') { triedTranscode = true; void player.retryWithTranscode() }
-    else if (player.transcode && player.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware() }
+    if (!slot.value.transcode && !triedTranscode && settings.transcodeMode !== 'off') { triedTranscode = true; void player.retryWithTranscode(slot.value.account) }
+    else if (slot.value.transcode && slot.value.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware(slot.value.account) }
   }, 6000)
 }
 
@@ -60,8 +76,8 @@ function onLoadedData() {
 // Always-on status badge reflecting what the pipeline is actually doing (copy vs GPU/CPU transcode).
 // Transcoding is fully automatic (copy → GPU → CPU); there is no manual button.
 const transcodeBadge = computed(() => {
-  if (player.currentCodec === 'nvenc') return 'Transcoding · GPU'
-  if (player.currentCodec === 'x264') return 'Transcoding · CPU'
+  if (slot.value?.currentCodec === 'nvenc') return 'Transcoding · GPU'
+  if (slot.value?.currentCodec === 'x264') return 'Transcoding · CPU'
   return 'No transcode needed'
 })
 
@@ -74,8 +90,9 @@ function clearProgressTimer() {
 // `session` — and thus fire this — BEFORE they touch `item`/`account`/`duration` for a new item, so
 // this always sees the outgoing item's own state, never a just-switched-to one.
 function saveProgressNow() {
-  if (!player.account || !player.item || player.duration == null || now.value <= 0) return
-  void collections.saveProgress(player.account, player.item, now.value, player.duration)
+  const s = slot.value
+  if (!s || !s.account || !s.item || s.duration == null || now.value <= 0) return
+  void collections.saveProgress(s.account, s.item, now.value, s.duration)
 }
 
 function teardown() {
@@ -101,13 +118,14 @@ function clearSub() {
 // Poll the (growing) WebVTT subtitle file every ~3s and refresh the <track> blob src so newly
 // muxed cues show up. Off/no-session → stop the timer and clear the track.
 async function refreshSub() {
-  if (player.selectedSubtitle == null || !player.session) {
+  const s = slot.value
+  if (!s || s.selectedSubtitle == null || !s.session) {
     clearSub()
     return
   }
   if (subTimer) clearInterval(subTimer)
   const tick = async () => {
-    const bytes = await player.session?.readSubtitle()
+    const bytes = await slot.value?.session?.readSubtitle()
     if (bytes && bytes.byteLength) {
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'text/vtt' }))
       if (subBlobUrl) URL.revokeObjectURL(subBlobUrl)
@@ -122,17 +140,18 @@ async function refreshSub() {
   await tick()
 }
 
-watch([() => player.selectedSubtitle, () => player.session], refreshSub, { immediate: true })
+watch([() => slot.value?.selectedSubtitle, () => slot.value?.session], refreshSub, { immediate: true })
 
 watch(
-  () => player.session,
+  () => slot.value?.session,
   (session) => {
     teardown()
     triedTranscode = false
     triedSoftwareFallback = false
     recordedHistory = false
-    if (!session || !video.value) return
-    if (player.duration != null) progressTimer = setInterval(saveProgressNow, PROGRESS_SAVE_MS) // VOD only — live has no meaningful "resume" offset
+    const s = slot.value
+    if (!session || !s || !video.value) return
+    if (s.duration != null) progressTimer = setInterval(saveProgressNow, PROGRESS_SAVE_MS) // VOD only — live has no meaningful "resume" offset
     if (Hls.isSupported()) {
       const Loader = session.createLoader() as never
       const bufferSeconds = settings.bufferSeconds || 30
@@ -157,6 +176,8 @@ watch(
       const codecErrorDetails = new Set(['bufferAppendError', 'bufferAddCodecError', 'fragParsingError'])
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return
+        const cur = slot.value
+        if (!cur) return
         // Recover from transient live errors rather than killing the whole session.
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) { hls?.startLoad(); return }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries++ < 3) { hls?.recoverMediaError(); return }
@@ -165,12 +186,12 @@ watch(
         // drop to software (x264). x264 is the last resort → then surface the error.
         const undecodable = codecErrorDetails.has(data.details) || data.type === Hls.ErrorTypes.MEDIA_ERROR
         if (undecodable) {
-          if (!player.transcode && !triedTranscode && settings.transcodeMode !== 'off') { triedTranscode = true; void player.retryWithTranscode(); return }
-          if (player.transcode && player.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware(); return }
+          if (!cur.transcode && !triedTranscode && settings.transcodeMode !== 'off') { triedTranscode = true; void player.retryWithTranscode(cur.account); return }
+          if (cur.transcode && cur.currentCodec === 'nvenc' && !triedSoftwareFallback) { triedSoftwareFallback = true; void player.fallbackToSoftware(cur.account); return }
         }
         // (transcodeMode 'off' or already on x264 → fall through to teardown+fail, no zombie session)
         teardown()
-        void player.fail(`Playback error: ${data.details}`)
+        void player.fail(`Playback error: ${data.details}`, cur.account)
       })
       buffering.value = true // loading first segments
       hls.loadSource(session.sourceUrl)
@@ -186,13 +207,14 @@ watch(
 // Log to History once per session, as soon as playback actually starts — driven off `status`
 // (rather than the hls.js-only MANIFEST_PARSED event) so it also covers the native-Safari fallback.
 watch(
-  () => player.status,
+  () => slot.value?.status,
   (status) => {
-    if (status === 'playing' && !recordedHistory && player.item && player.account) {
+    const s = slot.value
+    if (status === 'playing' && !recordedHistory && s?.item && s.account) {
       recordedHistory = true
       // pass the current runtime so an episode replayed from History keeps its seekbar + progress
       // tracking (movies re-fetch duration via their detail view; episodes have no such route)
-      void collections.recordHistory(player.account, player.item, player.duration)
+      void collections.recordHistory(s.account, s.item, s.duration)
     }
   },
 )
@@ -201,22 +223,24 @@ onBeforeUnmount(() => { teardown(); clearSub() })
 
 function close() {
   teardown()
-  void player.stop()
+  const s = slot.value
+  if (s) void player.stop(s.account)
 }
 
 function updatePlayhead() {
-  if (!video.value) return
-  now.value = player.startOffset + (video.value.currentTime || 0)
+  const s = slot.value
+  if (!video.value || !s) return
+  now.value = s.startOffset + (video.value.currentTime || 0)
   const buffered = video.value.buffered
-  bufferedEnd.value = player.startOffset + (buffered.length ? buffered.end(buffered.length - 1) : 0)
+  bufferedEnd.value = s.startOffset + (buffered.length ? buffered.end(buffered.length - 1) : 0)
   nowMs.value = Date.now()
 }
 
 // Live now-playing strip: matched programme + progress, recomputed off nowMs (bumped each
 // timeupdate/progress tick above) so the bar advances roughly once per second while playing.
 const liveNowNext = computed(() => {
-  if (player.item?.kind !== 'live') return null
-  return epg.nowNextFor(player.item.name, nowMs.value)
+  if (slot.value?.item?.kind !== 'live') return null
+  return epg.nowNextFor(slot.value.item.name, nowMs.value)
 })
 const liveProgressPct = computed(() => {
   const p = liveNowNext.value?.now
@@ -231,56 +255,60 @@ function togglePlay() {
 }
 
 function onScrub(e: MouseEvent) {
-  if (!track.value || player.duration == null) return
+  const s = slot.value
+  if (!track.value || !s || s.duration == null) return
   const r = track.value.getBoundingClientRect()
   const frac = clampFraction((e.clientX - r.left) / r.width)
-  void player.seek(frac * player.duration)
+  void player.seek(frac * s.duration, s.account)
 }
 </script>
 
 <template>
-  <div v-if="player.status !== 'idle'" class="iftv-player">
-    <div class="iftv-player-bar">
-      <span class="iftv-player-title text-truncate">{{ player.item?.name }}</span>
-      <span v-if="player.status === 'playing'" class="iftv-transcoding">{{ transcodeBadge }}</span>
+  <div v-if="slot" class="iftv-player" :class="{ minimized: minimizedActive, 'iftv-player-hidden': !isActive }">
+    <div v-if="full" class="iftv-player-bar">
+      <span class="iftv-player-title text-truncate">{{ slot.item?.name }}</span>
+      <span v-if="slot.status === 'playing'" class="iftv-transcoding">{{ transcodeBadge }}</span>
       <select
-        v-if="player.audioTracks.length > 1"
+        v-if="slot.audioTracks.length > 1"
         class="form-select form-select-sm iftv-track-select"
-        :value="player.selectedAudio"
-        @change="player.setAudioTrack(Number(($event.target as HTMLSelectElement).value))"
+        :value="slot.selectedAudio"
+        @change="player.setAudioTrack(Number(($event.target as HTMLSelectElement).value), slot.account)"
       >
-        <option v-for="t in player.audioTracks" :key="t.index" :value="t.index">{{ t.language || ('Audio ' + t.index) }}</option>
+        <option v-for="t in slot.audioTracks" :key="t.index" :value="t.index">{{ t.language || ('Audio ' + t.index) }}</option>
       </select>
       <select
-        v-if="player.subtitleTracks.length"
+        v-if="slot.subtitleTracks.length"
         class="form-select form-select-sm iftv-track-select"
-        :value="player.selectedSubtitle ?? ''"
-        @change="player.setSubtitle(($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value))"
+        :value="slot.selectedSubtitle ?? ''"
+        @change="player.setSubtitle(($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value), slot.account)"
       >
         <option value="">Off</option>
-        <option v-for="t in player.subtitleTracks" :key="t.index" :value="t.index" :disabled="!t.text">
+        <option v-for="t in slot.subtitleTracks" :key="t.index" :value="t.index" :disabled="!t.text">
           {{ (t.language || ('Sub ' + t.index)) + (t.text ? '' : ' (bitmap)') }}
         </option>
       </select>
       <button class="btn btn-sm btn-light" @click="close">✕ Close</button>
     </div>
-    <div v-if="liveNowNext?.now" class="iftv-epg-strip">
+    <div v-if="full && liveNowNext?.now" class="iftv-epg-strip">
       <span class="iftv-epg-strip-title text-truncate">{{ liveNowNext.now.title }}</span>
       <div class="iftv-epg-progress">
         <div class="iftv-epg-progress-bar" :style="{ width: liveProgressPct + '%' }"></div>
       </div>
     </div>
     <div class="iftv-player-body">
-      <p v-if="player.status === 'starting'" class="text-light p-3">Starting stream…</p>
-      <p v-else-if="player.status === 'error'" class="text-danger p-3">{{ player.error }}</p>
-      <div v-else-if="buffering" class="iftv-player-buffering">
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-        Buffering…
-      </div>
+      <template v-if="full">
+        <p v-if="slot.status === 'starting'" class="text-light p-3">Starting stream…</p>
+        <p v-else-if="slot.status === 'error'" class="text-danger p-3">{{ slot.error }}</p>
+        <div v-else-if="buffering" class="iftv-player-buffering">
+          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+          Buffering…
+        </div>
+      </template>
       <video
         ref="video"
         class="iftv-player-video"
-        :controls="player.duration == null"
+        :controls="slot.duration == null"
+        :muted="!isActive"
         autoplay
         playsinline
         @waiting="buffering = true"
@@ -296,14 +324,14 @@ function onScrub(e: MouseEvent) {
         <track ref="subTrack" kind="subtitles" label="Subtitles" default />
       </video>
     </div>
-    <div v-if="player.duration != null" class="iftv-seekbar">
+    <div v-if="full && slot.duration != null" class="iftv-seekbar">
       <button class="btn btn-sm btn-light" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
       <span class="iftv-seek-time">{{ formatTime(now) }}</span>
       <div ref="track" class="iftv-seek-track" @click="onScrub">
-        <div class="iftv-seek-buffered" :style="{ width: clampFraction(bufferedEnd / player.duration) * 100 + '%' }"></div>
-        <div class="iftv-seek-played" :style="{ width: clampFraction(now / player.duration) * 100 + '%' }"></div>
+        <div class="iftv-seek-buffered" :style="{ width: clampFraction(bufferedEnd / slot.duration) * 100 + '%' }"></div>
+        <div class="iftv-seek-played" :style="{ width: clampFraction(now / slot.duration) * 100 + '%' }"></div>
       </div>
-      <span class="iftv-seek-time">{{ formatTime(player.duration) }}</span>
+      <span class="iftv-seek-time">{{ formatTime(slot.duration) }}</span>
     </div>
   </div>
 </template>
