@@ -274,7 +274,7 @@ function close() {
           <span class="text-muted small">Current cache: {{ cacheSizeLabel }}</span>
           <button
             class="btn btn-sm btn-outline-secondary"
-            :disabled="player.status !== 'idle'"
+            :disabled="player.anyPlaying"
             @click="onClearCache"
           >
             Clear cache now

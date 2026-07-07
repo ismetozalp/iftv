@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView } from 'vue-router'
 import AccountTabBar from '@/components/AccountTabBar.vue'
-import PlayerView from '@/components/PlayerView.vue'
+import PlayerHost from '@/components/PlayerHost.vue'
 import MovieDetail from '@/views/detail/MovieDetail.vue'
 import SeriesDetail from '@/views/detail/SeriesDetail.vue'
 import SettingsView from '@/views/settings/SettingsView.vue'
@@ -43,7 +43,7 @@ onBeforeUnmount(() => clearInterval(epgClock))
     </main>
     <MovieDetail />
     <SeriesDetail />
-    <PlayerView />
+    <PlayerHost />
     <SettingsView :open="settingsOpen" @close="settingsOpen = false" />
   </div>
 </template>

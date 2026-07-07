@@ -85,6 +85,17 @@ body { margin: 0; }
 .iftv-player-title { flex: 1; font-weight: 600; }
 .iftv-player-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; }
 .iftv-player-video { max-width: 100%; max-height: 100%; background: #000; }
+/* Non-active accounts (PlayerHost mounts one PlayerView per playing account) stay mounted so the
+   <video>+hls session keeps decoding/playing uninterrupted — just moved off-screen, never display:none. */
+.iftv-player.iftv-player-hidden { position: fixed; inset: auto; left: -9999px; top: 0; width: 320px; height: 180px; opacity: 0; pointer-events: none; z-index: -1; }
+/* Minimized: the SAME <video> node docks into a bottom bar (never a separate element) so playback
+   is never interrupted. Root becomes a row; the video's own container shrinks to a thumbnail so the
+   bar-chrome (title + controls) can occupy the remaining row space. */
+.iftv-player.minimized { inset: auto; left: 0; right: 0; bottom: 0; top: auto; height: 56px; width: auto; flex-direction: row; align-items: center; gap: 0.5rem; background: var(--bs-body-bg); color: var(--bs-body-color); border-top: 1px solid var(--bs-border-color); z-index: 1055; padding: 0 0.5rem; }
+.iftv-player.minimized .iftv-player-body { flex: 0 0 auto; }
+.iftv-player.minimized video { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+.iftv-bar-chrome { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; }
+.iftv-bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .iftv-track-select { max-width: 9rem; }
 .iftv-transcoding {
   font-size: 0.75rem; color: #cde; background: rgba(255, 255, 255, 0.08);

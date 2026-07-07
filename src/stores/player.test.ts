@@ -2,11 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePlayerStore } from './player'
 import { useSettingsStore } from './settings'
+import { useWorkspaceStore } from './workspace'
 import type { PlaybackEngine, PlaybackSession } from '@/core/media/PlaybackEngine'
 import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
 
 const ACCT: Account = { id: 'a', type: 'xtream', name: 'X', url: 'http://h', username: 'u', password: 'p', createdAt: 1 }
+const ACCT2: Account = { id: 'b', type: 'xtream', name: 'Y', url: 'http://h2', username: 'u2', password: 'p2', createdAt: 2 }
 const item: ContentItem = { id: 'x:live:1', kind: 'live', name: 'CNN', logo: '', categoryId: '1', streamId: '1', seriesId: null, containerExtension: null, url: null }
 
 const MOVIE: ContentItem = { id: 'x:movie:9', kind: 'movie', name: 'A Movie', logo: '', categoryId: '1', streamId: '9', seriesId: null, containerExtension: 'mkv', url: null }
@@ -19,8 +21,39 @@ function engineWith(session: Partial<PlaybackSession> = {}): { engine: PlaybackE
   return { engine, stop }
 }
 
+// Per-account harness: tracks concurrently-active sessions AND stop() calls, keyed by accountId —
+// proves per-account maxActive===1 while different accounts run genuinely concurrently.
+function crossAccountEngine() {
+  const active = new Map<string, number>()
+  const maxActive = new Map<string, number>()
+  const stopsCalled = new Map<string, number>()
+  const engine: PlaybackEngine = {
+    start: vi.fn(async (account: Account) => {
+      const cur = (active.get(account.id) ?? 0) + 1
+      active.set(account.id, cur)
+      maxActive.set(account.id, Math.max(maxActive.get(account.id) ?? 0, cur))
+      return {
+        sourceUrl: 's', isLive: false, createLoader: () => class {}, readSubtitle: async () => null,
+        stop: async () => {
+          active.set(account.id, (active.get(account.id) ?? 1) - 1)
+          stopsCalled.set(account.id, (stopsCalled.get(account.id) ?? 0) + 1)
+        },
+      }
+    }),
+  }
+  return { engine, active, maxActive, stopsCalled }
+}
+
 describe('usePlayerStore', () => {
-  beforeEach(() => setActivePinia(createPinia()))
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    // ACCT is the active tab by default so the existing (pre-per-account) single-slot scenarios,
+    // which call actions without an explicit `account` arg, keep exercising ACCT's slot.
+    useWorkspaceStore().$patch({
+      accounts: { accounts: [ACCT, ACCT2] },
+      tabs: { openTabIds: [ACCT.id, ACCT2.id], activeTabId: ACCT.id },
+    })
+  })
 
   it('play() starts the engine and becomes playing with the session', async () => {
     const { engine } = engineWith()
@@ -428,5 +461,141 @@ describe('usePlayerStore', () => {
     await p.fail('boom')
     expect(p.audioTracks).toEqual([])
     expect(p.subtitleTracks).toEqual([])
+  })
+
+  // --- Per-account slots: cross-account concurrency + isolation -----------------------------
+  // This is the connection-leak-sensitive core, now keyed by accountId. Every test below proves
+  // an invariant: per-account maxActive===1, AND two accounts run genuinely concurrently, AND an
+  // op on one account's slot can never observe/stop/supersede another account's slot or `_mx`.
+  describe('cross-account isolation', () => {
+    it('two accounts play concurrently — both sessions alive, one connection EACH (maxActive per account===1)', async () => {
+      const { engine, active, maxActive } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      // Started in parallel — proves the two accounts' single-flight locks are independent
+      // (same-account concurrent calls would coalesce; different accounts must not).
+      await Promise.all([p.play(ACCT, item), p.play(ACCT2, item)])
+      expect(active.get(ACCT.id)).toBe(1)
+      expect(active.get(ACCT2.id)).toBe(1)
+      expect(maxActive.get(ACCT.id)).toBe(1) // per-account single-flight preserved
+      expect(maxActive.get(ACCT2.id)).toBe(1)
+      expect(p.slots[ACCT.id].status).toBe('playing')
+      expect(p.slots[ACCT2.id].status).toBe('playing')
+    })
+
+    it('an op on account A never stops or supersedes account B', async () => {
+      const { engine, stopsCalled } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      await p.play(ACCT, MOVIE, { durationSeconds: 5400 })
+      await p.play(ACCT2, item)
+      const bSessionBefore = p.slots[ACCT2.id].session
+      await p.seek(1200, ACCT) // restarts ONLY A's connection
+      expect(p.slots[ACCT.id].startOffset).toBe(1200)
+      expect(stopsCalled.get(ACCT.id) ?? 0).toBe(1) // A's old session was torn down
+      expect(p.slots[ACCT2.id].session).toBe(bSessionBefore) // B's session identity is untouched
+      expect(p.slots[ACCT2.id].status).toBe('playing')
+      expect(stopsCalled.get(ACCT2.id) ?? 0).toBe(0) // B was never stopped
+    })
+
+    it('play() refreshes slot.account to the latest object for that id (edited creds/URL reach _restart)', async () => {
+      const { engine } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      await p.play(ACCT, item)
+      const edited = { ...ACCT, url: 'http://new-host', password: 'changed' } // same id, new object (as updateAccount produces)
+      await p.play(edited, item)
+      // slot tracks the latest object's values → seek/track-change reconnect with fresh creds (assert by value; Pinia proxies the object)
+      expect(p.slots[ACCT.id].account.url).toBe('http://new-host')
+      expect(p.slots[ACCT.id].account.password).toBe('changed')
+    })
+
+    it('stop(A) leaves B playing', async () => {
+      const { engine, stopsCalled } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      await p.play(ACCT, item)
+      await p.play(ACCT2, item)
+      await p.stop(ACCT)
+      expect(p.slots[ACCT.id].status).toBe('idle')
+      expect(p.slots[ACCT.id].session).toBeNull()
+      expect(p.slots[ACCT2.id].status).toBe('playing')
+      expect(p.slots[ACCT2.id].session).not.toBeNull()
+      expect(stopsCalled.get(ACCT2.id) ?? 0).toBe(0)
+    })
+
+    it('switching channel within A replaces only A (A stays single-flight), B untouched', async () => {
+      const { engine, active, maxActive, stopsCalled } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      await p.play(ACCT, { ...item, id: 'x:live:1', streamId: '1' })
+      await p.play(ACCT2, item)
+      const bSession = p.slots[ACCT2.id].session
+      await p.play(ACCT, { ...item, id: 'x:live:2', streamId: '2' })
+      expect(p.slots[ACCT.id].item?.id).toBe('x:live:2')
+      expect(maxActive.get(ACCT.id)).toBe(1) // never two A-sessions alive at once
+      expect(active.get(ACCT.id)).toBe(1) // no leak on A
+      expect(p.slots[ACCT2.id].session).toBe(bSession) // B's session identity unchanged
+      expect(p.slots[ACCT2.id].item?.id).toBe(item.id)
+      expect(stopsCalled.get(ACCT2.id) ?? 0).toBe(0)
+    })
+
+    it('minimize/restore(account) toggles only that account\'s slot.minimized, never touches the session', async () => {
+      const { engine, stopsCalled } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      await p.play(ACCT, item)
+      await p.play(ACCT2, item)
+      const aSession = p.slots[ACCT.id].session
+      const bSession = p.slots[ACCT2.id].session
+      p.minimize(ACCT)
+      expect(p.slots[ACCT.id].minimized).toBe(true)
+      expect(p.slots[ACCT2.id].minimized).toBe(false) // B untouched
+      expect(p.slots[ACCT.id].session).toBe(aSession) // no restart
+      expect(p.slots[ACCT2.id].session).toBe(bSession)
+      expect(stopsCalled.size).toBe(0) // minimize never stops anything
+      p.restore(ACCT)
+      expect(p.slots[ACCT.id].minimized).toBe(false)
+      expect(p.slots[ACCT.id].session).toBe(aSession)
+      expect(stopsCalled.size).toBe(0)
+    })
+
+    it('back-compat proxies (status/item/session) reflect the ACTIVE tab only', async () => {
+      const { engine } = crossAccountEngine()
+      const p = usePlayerStore()
+      const ws = useWorkspaceStore()
+      p.$configure({ engine, sleep: async () => {} })
+      await p.play(ACCT, { ...item, id: 'x:live:1', streamId: '1' })
+      await p.play(ACCT2, { ...item, id: 'x:live:2', streamId: '2' })
+      expect(p.item?.id).toBe('x:live:1') // ACCT is the active tab (see beforeEach)
+      expect(p.session).toBe(p.slots[ACCT.id].session)
+      ws.$patch({ tabs: { activeTabId: ACCT2.id } })
+      expect(p.item?.id).toBe('x:live:2') // now reflects ACCT2's slot
+      expect(p.session).toBe(p.slots[ACCT2.id].session)
+    })
+
+    it('playingSlots/anyPlaying reflect ALL playing accounts, not just the active tab', async () => {
+      const { engine } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      expect(p.anyPlaying).toBe(false)
+      expect(p.playingSlots).toEqual([])
+      await p.play(ACCT, item)
+      await p.play(ACCT2, item)
+      expect(p.anyPlaying).toBe(true)
+      expect(p.playingSlots.map((s) => s.accountId).sort()).toEqual([ACCT.id, ACCT2.id].sort())
+      await p.stop(ACCT)
+      expect(p.anyPlaying).toBe(true) // B still playing
+      expect(p.playingSlots.map((s) => s.accountId)).toEqual([ACCT2.id])
+    })
+
+    it('activeSlot falls back to an idle sentinel when there is no active tab', () => {
+      useWorkspaceStore().$patch({ tabs: { activeTabId: null } })
+      const p = usePlayerStore()
+      expect(p.status).toBe('idle')
+      expect(p.item).toBeNull()
+      expect(p.session).toBeNull()
+      expect(p.minimized).toBe(false)
+    })
   })
 })
