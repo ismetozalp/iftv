@@ -498,6 +498,17 @@ describe('usePlayerStore', () => {
       expect(stopsCalled.get(ACCT2.id) ?? 0).toBe(0) // B was never stopped
     })
 
+    it('play() refreshes slot.account to the latest object for that id (edited creds/URL reach _restart)', async () => {
+      const { engine } = crossAccountEngine()
+      const p = usePlayerStore()
+      p.$configure({ engine, sleep: async () => {} })
+      await p.play(ACCT, item)
+      const edited = { ...ACCT, url: 'http://new-host', password: 'changed' } // same id, new object (as updateAccount produces)
+      await p.play(edited, item)
+      expect(p.slots[ACCT.id].account).toBe(edited) // slot tracks the latest → seek/track-change reconnect with fresh creds
+      expect(p.slots[ACCT.id].account.url).toBe('http://new-host')
+    })
+
     it('stop(A) leaves B playing', async () => {
       const { engine, stopsCalled } = crossAccountEngine()
       const p = usePlayerStore()

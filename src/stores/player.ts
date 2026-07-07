@@ -165,6 +165,7 @@ export const usePlayerStore = defineStore('player', {
       await this._exclusive(slot, async () => {
         if (gen !== slot._mx.gen) return // superseded before we got the lock
         if (slot.session) { const s = slot.session; slot.session = null; await s.stop() }
+        slot.account = account // refresh to the latest Account object for this id (creds/URL may have been edited); _restart reads slot.account
         slot.status = 'starting'
         slot.error = ''
         slot.item = item
