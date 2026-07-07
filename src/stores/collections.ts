@@ -28,6 +28,7 @@ interface Deps {
 export const useCollectionsStore = defineStore('collections', {
   state: () => ({
     data: emptyLibrary() as LibraryData,
+    _loaded: null as Promise<void> | null, // in-flight/completed initial load; gates every persist
     _deps: null as Deps | null,
   }),
   actions: {
@@ -38,62 +39,67 @@ export const useCollectionsStore = defineStore('collections', {
       if (!this._deps) this._deps = { store: await createCockpitStore() }
       return this._deps
     },
+    // Idempotent: the initial read runs once. A transient failure (e.g. cockpit reconnecting after a
+    // restart) resets it so the next call retries — and, crucially, a failed load never leaves the
+    // store "loaded" as empty for a persist to clobber the file with.
     async load() {
-      const { store } = await this._host()
-      const loaded = await store.load('library.json', emptyLibrary())
-      this.data = { ...emptyLibrary(), ...loaded }
+      if (!this._loaded) {
+        this._loaded = (async () => {
+          const { store } = await this._host()
+          const loaded = await store.load('library.json', emptyLibrary())
+          this.data = { ...emptyLibrary(), ...loaded }
+        })().catch((e) => {
+          this._loaded = null
+          throw e
+        })
+      }
+      return this._loaded
     },
-    async _persist() {
+    // Every mutation loads the on-disk library FIRST, then applies + persists. This is what makes
+    // favorites survive: a mutation that races the fire-and-forget initial load (App.vue's
+    // `void collections.load()`) — e.g. recordHistory/saveProgress firing on play right after a
+    // cockpit restart — can never write an empty library over real data.
+    async _mutate(fn: (d: LibraryData) => LibraryData) {
+      await this.load()
+      this.data = fn(this.data)
       const { store } = await this._host()
       await store.save('library.json', this.data)
     },
     async toggleFavorite(account: Account, item: ContentItem) {
-      this.data = libToggleFavorite(this.data, account, item, Date.now())
-      await this._persist()
+      await this._mutate((d) => libToggleFavorite(d, account, item, Date.now()))
     },
     async addWatchLater(account: Account, item: ContentItem) {
-      this.data = libAddWatchLater(this.data, account, item, Date.now())
-      await this._persist()
+      await this._mutate((d) => libAddWatchLater(d, account, item, Date.now()))
     },
     async removeWatchLater(accountId: string, itemId: string) {
-      this.data = libRemoveWatchLater(this.data, accountId, itemId)
-      await this._persist()
+      await this._mutate((d) => libRemoveWatchLater(d, accountId, itemId))
     },
     async createList(name: string) {
-      this.data = libCreateList(this.data, name, Date.now())
-      await this._persist()
+      await this._mutate((d) => libCreateList(d, name, Date.now()))
     },
     async renameList(listId: string, name: string) {
-      this.data = libRenameList(this.data, listId, name)
-      await this._persist()
+      await this._mutate((d) => libRenameList(d, listId, name))
     },
     async deleteList(listId: string) {
-      this.data = libDeleteList(this.data, listId)
-      await this._persist()
+      await this._mutate((d) => libDeleteList(d, listId))
     },
     async addToList(listId: string, account: Account, item: ContentItem) {
-      this.data = libAddToList(this.data, listId, account, item, Date.now())
-      await this._persist()
+      await this._mutate((d) => libAddToList(d, listId, account, item, Date.now()))
     },
     async removeFromList(listId: string, itemId: string, accountId: string) {
-      this.data = libRemoveFromList(this.data, listId, itemId, accountId)
-      await this._persist()
+      await this._mutate((d) => libRemoveFromList(d, listId, itemId, accountId))
     },
     async saveProgress(account: Account, item: ContentItem, offsetSeconds: number, durationSeconds: number | null) {
-      this.data = libUpsertProgress(this.data, account, item, offsetSeconds, durationSeconds, Date.now())
-      await this._persist()
+      await this._mutate((d) => libUpsertProgress(d, account, item, offsetSeconds, durationSeconds, Date.now()))
     },
     async removeProgress(accountId: string, itemId: string) {
-      this.data = libRemoveProgress(this.data, accountId, itemId)
-      await this._persist()
+      await this._mutate((d) => libRemoveProgress(d, accountId, itemId))
     },
     async recordHistory(account: Account, item: ContentItem, durationSeconds: number | null = null) {
-      this.data = libRecordHistory(this.data, account, item, Date.now(), durationSeconds)
-      await this._persist()
+      await this._mutate((d) => libRecordHistory(d, account, item, Date.now(), durationSeconds))
     },
     async clearHistory() {
-      this.data = libClearHistory(this.data)
-      await this._persist()
+      await this._mutate((d) => libClearHistory(d))
     },
   },
   getters: {

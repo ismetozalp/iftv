@@ -25,6 +25,21 @@ describe('useCollectionsStore', () => {
     expect(c.data).toEqual(emptyLibrary())
   })
 
+  it('a mutation before load() completes does NOT clobber the persisted library (fire-and-forget load race)', async () => {
+    // Simulates App.vue firing `void collections.load()` while the file already has favorites, and a
+    // play immediately recording history before the load resolves — the persisted favorites must survive.
+    const seeded = { ...emptyLibrary(), favorites: [{ item: movie, accountId: 'acc1', addedAt: 5 }] }
+    const store = createMemoryStore({ 'library.json': seeded })
+    const c = useCollectionsStore()
+    c.$configure({ store })
+    // NOTE: no explicit `await c.load()` here — recordHistory must load-then-mutate, not persist over empty.
+    await c.recordHistory(A, movie, null)
+    expect(c.data.favorites).toHaveLength(1) // in-memory kept the favorite
+    const persisted = await store.load('library.json', emptyLibrary())
+    expect(persisted.favorites).toHaveLength(1) // and it was NOT wiped on disk
+    expect(persisted.history).toHaveLength(1) // history still recorded
+  })
+
   it('load reads persisted data', async () => {
     const seeded = { ...emptyLibrary(), favorites: [{ item: movie, accountId: 'acc1', addedAt: 5 }] }
     const store = createMemoryStore({ 'library.json': seeded })
