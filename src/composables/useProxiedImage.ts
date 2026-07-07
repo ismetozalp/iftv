@@ -1,5 +1,12 @@
 import { ref, watch, type Ref } from 'vue'
 import { fetchImageBytes } from '@/adapters/cockpitImage'
+import { createLimiter } from '@/core/util/concurrencyLimit'
+
+// Cap concurrent logo/poster fetches across the WHOLE app. Each fetch is a host-side
+// `cockpit.spawn(curl)`; a big M3U grid (thousands of channels, external logos) would otherwise
+// fire dozens at once and — together with an active playback session's cockpit I/O — flood the
+// Cockpit bridge and crash the renderer. 6 mirrors a browser's per-host connection limit.
+const imageLimiter = createLimiter(6)
 
 export interface UseProxiedImageDeps {
   fetchBytes?: (url: string) => Promise<Uint8Array>
@@ -36,7 +43,7 @@ export function useProxiedImage(
         return
       }
       try {
-        const bytes = await fetchBytes(value)
+        const bytes = await imageLimiter.run(() => fetchBytes(value))
         const blobUrl = makeUrl(bytes)
         cache.set(value, blobUrl)
         url.value = blobUrl
