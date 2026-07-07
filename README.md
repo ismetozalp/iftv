@@ -177,6 +177,12 @@ npm run test:smoke  # SPA smoke (Playwright)
 make test           # test + typecheck
 ```
 
+## Check out my other plugin
+
+If you like this, you might like **[Explorer](https://github.com/ismetozalp/explorer)** —
+another Cockpit plugin that turns the web console into a full file manager: browse, edit,
+preview, search, terminals, and Git, plus fstab/mounts, SMB & NFS shares, and a GRUB editor.
+
 ## License
 
 Apache-2.0.
