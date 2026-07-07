@@ -10,6 +10,7 @@ import { gatherFiles, restoreFiles, downloadTextFile, readUploadedFile } from '@
 import { buildBundle, parseBundle } from '@/core/backup/bundle'
 import { encryptBackup, decryptBackup } from '@/core/backup/crypto'
 import type { TranscodeMode } from '@/core/media/encoder'
+import type { ThemeMode } from '@/core/theme'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -21,6 +22,10 @@ const epg = useEpgStore()
 function onInput(e: Event) {
   const n = Number((e.target as HTMLInputElement).value)
   void settings.setBufferSeconds(n)
+}
+
+function onThemeChange(e: Event) {
+  void settings.setThemeMode((e.target as HTMLSelectElement).value as ThemeMode)
 }
 
 function onTranscodeModeChange(e: Event) {
@@ -184,6 +189,20 @@ function close() {
     <div class="iftv-detail-card" style="max-width: 420px">
       <button class="btn btn-sm btn-light iftv-detail-close" @click="close">✕ Close</button>
       <h4>Settings</h4>
+      <div class="mt-3">
+        <label for="iftv-theme" class="form-label">Theme</label>
+        <select
+          id="iftv-theme"
+          class="form-select"
+          :value="settings.themeMode"
+          @change="onThemeChange"
+        >
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+        <p class="text-muted small mt-2 mb-0">System follows your Cockpit / OS theme.</p>
+      </div>
       <div class="mt-3">
         <label for="iftv-buffer-seconds" class="form-label">Buffer seconds</label>
         <input

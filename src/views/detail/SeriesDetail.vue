@@ -126,20 +126,20 @@ function close() {
             <button
               v-if="ws.activeAccount"
               type="button"
-              class="btn btn-sm btn-outline-light"
+              class="btn btn-sm btn-outline-secondary"
               :class="{ active: isFav }"
               @click="toggleFavorite"
             >
               <span v-if="isFav">★ Favorited</span>
               <span v-else>☆ Favorite</span>
             </button>
-            <button v-if="ws.activeAccount" type="button" class="btn btn-sm btn-outline-light" @click="addToWatchLater">
+            <button v-if="ws.activeAccount" type="button" class="btn btn-sm btn-outline-secondary" @click="addToWatchLater">
               ＋ Watch Later
             </button>
             <div v-if="ws.activeAccount" class="dropdown" @click.stop>
               <button
                 type="button"
-                class="btn btn-sm btn-outline-light dropdown-toggle"
+                class="btn btn-sm btn-outline-secondary dropdown-toggle"
                 aria-expanded="false"
                 @click.stop="toggleListMenu"
               >
@@ -186,7 +186,7 @@ function close() {
   </div>
   <div v-else-if="detail.loading && detail.mode === 'series'" class="iftv-detail">
     <div class="iftv-detail-card">
-      <p class="text-light p-3">Loading…</p>
+      <p class="text-body p-3">Loading…</p>
     </div>
   </div>
   <div v-else-if="detail.error && detail.mode === 'series'" class="iftv-detail">

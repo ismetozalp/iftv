@@ -4,12 +4,14 @@ import { createCockpitStore } from '@/adapters/cockpitFile'
 import { detectEncoders } from '@/adapters/cockpitEncoders'
 import { probeWritable as cockpitProbeWritable } from '@/adapters/cockpitCache'
 import type { EncoderTest, TranscodeMode } from '@/core/media/encoder'
+import { THEME_MODES, type ThemeMode } from '@/core/theme'
 
 const DEFAULT_BUFFER_SECONDS = 30
 const MIN_BUFFER_SECONDS = 5
 const MAX_BUFFER_SECONDS = 120
 const DEFAULT_TRANSCODE_MODE: TranscodeMode = 'auto'
 const TRANSCODE_MODES: TranscodeMode[] = ['auto', 'gpu', 'software', 'off']
+const DEFAULT_THEME_MODE: ThemeMode = 'system'
 const DEFAULT_CACHE_LIMIT_GB = 5
 const MIN_CACHE_LIMIT_GB = 1
 export const DEFAULT_EPG_URL = 'https://epgshare01.online/epgshare01/epg_ripper_TR1.xml.gz'
@@ -29,6 +31,7 @@ interface PersistedSettings {
   cacheDir: string
   cacheLimitGb: number
   epgUrl: string
+  themeMode: ThemeMode
 }
 
 function clampBufferSeconds(n: number): number {
@@ -47,6 +50,7 @@ export const useSettingsStore = defineStore('settings', {
     cacheDir: '' as string,
     cacheLimitGb: DEFAULT_CACHE_LIMIT_GB,
     epgUrl: DEFAULT_EPG_URL as string,
+    themeMode: DEFAULT_THEME_MODE as ThemeMode,
     _deps: null as Deps | null,
   }),
   actions: {
@@ -66,6 +70,7 @@ export const useSettingsStore = defineStore('settings', {
         cacheDir: this.cacheDir,
         cacheLimitGb: this.cacheLimitGb,
         epgUrl: this.epgUrl,
+        themeMode: this.themeMode,
       }
       await store.save('settings.json', value)
     },
@@ -78,6 +83,7 @@ export const useSettingsStore = defineStore('settings', {
         cacheDir: '',
         cacheLimitGb: DEFAULT_CACHE_LIMIT_GB,
         epgUrl: DEFAULT_EPG_URL,
+        themeMode: DEFAULT_THEME_MODE,
       })
       this.bufferSeconds = clampBufferSeconds(loaded.bufferSeconds)
       this.transcodeMode = loaded.transcodeMode ?? DEFAULT_TRANSCODE_MODE
@@ -85,6 +91,8 @@ export const useSettingsStore = defineStore('settings', {
       this.cacheDir = loaded.cacheDir ?? ''
       this.cacheLimitGb = clampCacheLimitGb(loaded.cacheLimitGb ?? DEFAULT_CACHE_LIMIT_GB)
       this.epgUrl = loaded.epgUrl ?? DEFAULT_EPG_URL
+      const loadedThemeMode = loaded.themeMode ?? DEFAULT_THEME_MODE
+      this.themeMode = THEME_MODES.includes(loadedThemeMode) ? loadedThemeMode : DEFAULT_THEME_MODE
     },
     async setBufferSeconds(n: number) {
       this.bufferSeconds = clampBufferSeconds(n)
@@ -93,6 +101,11 @@ export const useSettingsStore = defineStore('settings', {
     async setTranscodeMode(m: TranscodeMode) {
       if (!TRANSCODE_MODES.includes(m)) throw new Error(`invalid transcode mode: ${String(m)}`)
       this.transcodeMode = m
+      await this._persist()
+    },
+    async setThemeMode(m: ThemeMode) {
+      if (!THEME_MODES.includes(m)) return
+      this.themeMode = m
       await this._persist()
     },
     async runEncoderTest(now = 0) {
