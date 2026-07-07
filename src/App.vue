@@ -17,6 +17,9 @@ const settings = useSettingsStore()
 const collections = useCollectionsStore()
 const epg = useEpgStore()
 const settingsOpen = ref(false)
+// The full player overlays below the header so the account tabs stay reachable while playing.
+// Header height varies (tabs wrap with many accounts), so publish it as a CSS var the player reads.
+const headerEl = ref<HTMLElement>()
 onMounted(() => {
   void ws.init()
   void settings.load()
@@ -24,6 +27,13 @@ onMounted(() => {
   void epg.load().then(() => epg.ensureFresh())
   const stopTheme = initTheme(() => settings.themeMode)
   onBeforeUnmount(stopTheme)
+  if (headerEl.value) {
+    const ro = new ResizeObserver(() =>
+      document.documentElement.style.setProperty('--iftv-header-h', `${headerEl.value!.offsetHeight}px`),
+    )
+    ro.observe(headerEl.value)
+    onBeforeUnmount(() => ro.disconnect())
+  }
 })
 watch(() => settings.themeMode, (m) => reapplyTheme(m))
 // One shared clock (not one per card) so EPG now/next lines roll over without a full refresh.
@@ -33,7 +43,7 @@ onBeforeUnmount(() => clearInterval(epgClock))
 
 <template>
   <div class="iftv-shell">
-    <header class="iftv-header d-flex align-items-center gap-3">
+    <header ref="headerEl" class="iftv-header d-flex align-items-center gap-3">
       <strong>InFlight TV</strong>
       <AccountTabBar />
       <button class="btn btn-sm btn-link ms-auto" title="Settings" @click="settingsOpen = true">⚙ Settings</button>

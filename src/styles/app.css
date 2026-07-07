@@ -7,7 +7,9 @@
 }
 body { margin: 0; }
 .iftv-shell { min-height: 100vh; display: flex; flex-direction: column; }
-.iftv-header { padding: 0.5rem 1rem; border-bottom: 1px solid var(--bs-border-color); }
+/* Sticky + above the full player (z 1050) so the account tabs stay visible and clickable while a
+   channel plays. Solid background so the video below never bleeds through. */
+.iftv-header { padding: 0.5rem 1rem; border-bottom: 1px solid var(--bs-border-color); position: sticky; top: 0; z-index: 1060; background: var(--bs-body-bg); }
 .iftv-main { flex: 1; padding: 1rem; }
 
 .iftv-tabbar { gap: 0.25rem; flex-wrap: wrap; }
@@ -80,7 +82,9 @@ body { margin: 0; }
 .iftv-guide-popover-card { background: var(--bs-body-bg); color: var(--bs-body-color); border-radius: 8px; padding: 1rem; max-width: 420px; width: 100%; }
 
 /* Player + its bar/EPG-strip/seekbar below are video chrome — intentionally dark in both themes (each sets its own bg+fg, never assumes an ambient --bs-* surface). */
-.iftv-player { position: fixed; inset: 0; z-index: 1050; background: #000; display: flex; flex-direction: column; }
+/* Full player starts below the sticky header (var set by App.vue) so the account tabs remain
+   reachable; left/right/bottom still fill the viewport. Hidden/minimized variants override top. */
+.iftv-player { position: fixed; top: var(--iftv-header-h, 0); left: 0; right: 0; bottom: 0; z-index: 1050; background: #000; display: flex; flex-direction: column; }
 .iftv-player-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem; background: #111; color: #fff; }
 .iftv-player-title { flex: 1; font-weight: 600; }
 .iftv-player-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; }
