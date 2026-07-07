@@ -333,6 +333,7 @@ export const usePlayerStore = defineStore('player', {
         slot.session = null
         slot.status = 'error'
         slot.error = message
+        slot.minimized = false // surface the error in the full player, not hidden behind the minimized bar
         slot.duration = null
         slot.startOffset = 0
         slot.transcode = false
