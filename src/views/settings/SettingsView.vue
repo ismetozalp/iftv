@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import cockpit from 'cockpit'
-import { useSettingsStore, DEFAULT_EPG_URL } from '@/stores/settings'
+import { useSettingsStore } from '@/stores/settings'
 import { usePlayerStore } from '@/stores/player'
 import { useEpgStore } from '@/stores/epg'
 import { useUpdaterStore } from '@/stores/updater'
@@ -290,7 +290,7 @@ function close() {
           <input
             id="iftv-epg-url"
             class="form-control"
-            :placeholder="DEFAULT_EPG_URL"
+            placeholder="https://…/epg.xml.gz (optional)"
             v-model="epgUrlInput"
           />
           <button class="btn btn-sm btn-outline-secondary" @click="onSaveEpgUrl">Save</button>

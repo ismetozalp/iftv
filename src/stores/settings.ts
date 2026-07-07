@@ -15,7 +15,9 @@ const TRANSCODE_MODES: TranscodeMode[] = ['auto', 'gpu', 'software', 'off']
 const DEFAULT_THEME_MODE: ThemeMode = 'system'
 const DEFAULT_CACHE_LIMIT_GB = 5
 const MIN_CACHE_LIMIT_GB = 1
-export const DEFAULT_EPG_URL = 'https://epgshare01.online/epgshare01/epg_ripper_TR1.xml.gz'
+// No default global EPG — each account resolves its own guide (manual URL / Xtream xmltv.php /
+// M3U url-tvg). This is only an optional shared fallback for accounts that have none.
+export const DEFAULT_EPG_URL = ''
 export const EPG_TTL_MS = 12 * 3600 * 1000
 const EPG_URL_RE = /^https?:\/\//
 
