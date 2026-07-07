@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildIndex, nowNext, programmesInWindow, daySchedule } from './index'
+import { buildIndex, lookup, nowNext, programmesInWindow, daySchedule } from './index'
 import type { ParsedEpg, Programme } from './types'
 
 const HOUR = 3600_000
@@ -19,9 +19,11 @@ describe('buildIndex', () => {
     }
     const idx = buildIndex(parsed)
     // 'HD' is a quality token stripped by normalizeChannelName, so 'TRT 1 HD' -> 'trt 1'
-    expect(Object.keys(idx).sort()).toEqual(['trt 1', 'trt1'].sort())
-    expect(idx['trt 1'].map((p) => p.title)).toEqual(['First', 'Second'])
-    expect(idx['trt1'].map((p) => p.title)).toEqual(['First', 'Second'])
+    expect(Object.keys(idx.byName).sort()).toEqual(['trt 1', 'trt1'].sort())
+    expect(idx.byName['trt 1'].map((p) => p.title)).toEqual(['First', 'Second'])
+    expect(idx.byName['trt1'].map((p) => p.title)).toEqual(['First', 'Second'])
+    // also indexed by the channel's EPG id
+    expect(idx.byId['TRT.1.HD.tr'].map((p) => p.title)).toEqual(['First', 'Second'])
   })
 
   it('handles multiple channels independently', () => {
@@ -33,8 +35,19 @@ describe('buildIndex', () => {
       programmes: [prog('a', 0, HOUR, 'A1'), prog('b', 0, HOUR, 'B1')],
     }
     const idx = buildIndex(parsed)
-    expect(idx['alpha'].map((p) => p.title)).toEqual(['A1'])
-    expect(idx['beta'].map((p) => p.title)).toEqual(['B1'])
+    expect(idx.byName['alpha'].map((p) => p.title)).toEqual(['A1'])
+    expect(idx.byName['beta'].map((p) => p.title)).toEqual(['B1'])
+  })
+
+  it('lookup() prefers the EPG id, falls back to the normalized name', () => {
+    const parsed: ParsedEpg = {
+      channels: [{ id: 'cnn.us', names: ['CNN International'] }],
+      programmes: [prog('cnn.us', 0, HOUR, 'News')],
+    }
+    const idx = buildIndex(parsed)
+    expect(lookup(idx, 'anything', 'cnn.us').map((p) => p.title)).toEqual(['News']) // id wins
+    expect(lookup(idx, 'CNN International', '').map((p) => p.title)).toEqual(['News']) // name fallback
+    expect(lookup(idx, 'Unknown', 'no.match')).toEqual([]) // neither → empty
   })
 })
 

@@ -62,7 +62,8 @@ function submit() {
         </button>
       </div>
     </template>
-    <input v-model="form.epgUrl" class="form-control mb-2" placeholder="EPG URL (XMLTV) — optional" />
+    <input v-model="form.epgUrl" class="form-control mb-1" placeholder="EPG URL (XMLTV) — optional" />
+    <small class="text-muted d-block mb-2">Leave blank to auto-detect (Xtream panel guide / playlist <code>url-tvg</code>), or fall back to the default in Settings.</small>
     <div class="d-flex gap-2">
       <button class="btn btn-primary btn-sm" :disabled="busy">{{ busy ? 'Verifying…' : (modelValue ? 'Save' : 'Add & verify') }}</button>
       <button v-if="modelValue" type="button" class="btn btn-outline-secondary btn-sm" @click="emit('cancel')">Cancel</button>

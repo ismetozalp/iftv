@@ -267,7 +267,7 @@ function onTimeupdate() {
 // timeupdate/progress tick above) so the bar advances roughly once per second while playing.
 const liveNowNext = computed(() => {
   if (slot.value?.item?.kind !== 'live') return null
-  return epg.nowNextFor(slot.value.item.name, nowMs.value)
+  return epg.nowNextFor(slot.value.item.name, slot.value.item.epgId, slot.value.account.id, nowMs.value)
 })
 const liveProgressPct = computed(() => {
   const p = liveNowNext.value?.now

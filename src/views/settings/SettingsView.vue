@@ -285,7 +285,7 @@ function close() {
       </div>
       <div class="mt-3">
         <h5>TV Guide (EPG)</h5>
-        <label for="iftv-epg-url" class="form-label">EPG URL (XMLTV, optional gzip)</label>
+        <label for="iftv-epg-url" class="form-label">Default EPG URL (XMLTV, optional gzip)</label>
         <div class="d-flex align-items-center gap-2">
           <input
             id="iftv-epg-url"
@@ -295,17 +295,17 @@ function close() {
           />
           <button class="btn btn-sm btn-outline-secondary" @click="onSaveEpgUrl">Save</button>
         </div>
-        <small class="text-muted">Leave empty to disable the TV guide.</small>
+        <small class="text-muted">Fallback used only for accounts that don't have their own EPG (each account can set its own, and Xtream/M3U guides are auto-detected). Empty = no fallback.</small>
         <div class="text-danger small" v-if="epgError">{{ epgError }}</div>
         <div class="d-flex align-items-center gap-2 mt-2">
-          <button class="btn btn-sm btn-outline-secondary" :disabled="epg.loading" @click="onRefreshEpgNow">
-            {{ epg.loading ? 'Refreshing…' : 'Refresh now' }}
+          <button class="btn btn-sm btn-outline-secondary" :disabled="epg.isLoading()" @click="onRefreshEpgNow">
+            {{ epg.isLoading() ? 'Refreshing…' : 'Refresh now' }}
           </button>
           <span class="text-muted small">
-            Last updated: {{ formatRelative(epg.loadedAt) }} · {{ Object.keys(epg.index).length }} channels
+            Last updated: {{ formatRelative(epg.loadedAtFor()) }} · {{ epg.channelCountFor() }} channels
           </span>
         </div>
-        <div class="text-danger small" v-if="epg.error">{{ epg.error }}</div>
+        <div class="text-danger small" v-if="epg.errorFor()">{{ epg.errorFor() }}</div>
       </div>
       <div class="mt-3">
         <h5>Backup & restore</h5>

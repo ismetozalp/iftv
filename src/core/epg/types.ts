@@ -16,4 +16,8 @@ export interface ParsedEpg {
   programmes: Programme[]
 }
 
-export type EpgIndex = Record<string, Programme[]>
+// Programmes looked up by channel EPG id (exact) or by normalized channel name (fallback).
+export interface EpgIndex {
+  byId: Record<string, Programme[]>
+  byName: Record<string, Programme[]>
+}

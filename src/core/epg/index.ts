@@ -10,17 +10,26 @@ export function buildIndex(parsed: ParsedEpg): EpgIndex {
   }
   for (const list of byChannelId.values()) list.sort((a, b) => a.startMs - b.startMs)
 
-  const index: EpgIndex = {}
+  const index: EpgIndex = { byId: {}, byName: {} }
   for (const channel of parsed.channels) {
     const programmes = byChannelId.get(channel.id) ?? []
+    if (channel.id) index.byId[channel.id] = programmes
     for (const name of channel.names) {
       const key = normalizeChannelName(name)
       if (!key) continue
-      index[key] = programmes
+      index.byName[key] = programmes
     }
   }
   return index
 }
+
+// Look up a channel's programmes by its EPG id (exact, wins) then its normalized name (fallback).
+export function lookup(index: EpgIndex, name: string, epgId: string): Programme[] {
+  if (epgId && index.byId[epgId]) return index.byId[epgId]
+  return index.byName[normalizeChannelName(name)] ?? []
+}
+
+export const EMPTY_INDEX: EpgIndex = { byId: {}, byName: {} }
 
 export function nowNext(progs: Programme[], nowMs: number): { now: Programme | null; next: Programme | null } {
   let now: Programme | null = null
