@@ -128,7 +128,10 @@ export const useEpgStore = defineStore('epg', {
         this.loadingIds = this.loadingIds.filter((x) => x !== id)
         if (this._refreshAgain.includes(id)) {
           this._refreshAgain = this._refreshAgain.filter((x) => x !== id)
-          void this.refresh(account) // resolves the URL afresh (now incl. any newly-known tvgUrl)
+          // Re-check via ensureFresh, NOT a blind refresh: it re-runs only if the resolved URL
+          // actually changed (e.g. tvgUrl became known) or the cache is stale — so a redundant
+          // same-URL double-trigger (loop + activeAccount watch) doesn't re-fetch the feed twice.
+          void this.ensureFresh(account)
         }
       }
     },
