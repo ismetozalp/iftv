@@ -122,7 +122,10 @@ export const usePlayerStore = defineStore('player', {
     // Get-or-create the slot for `account`, assigning it into the reactive `slots` map so its
     // fields (status/item/minimized/…) stay reactive for the UI.
     _slot(account: Account): Slot {
-      return (this.slots[account.id] ??= emptySlot(account))
+      // Must return the store's REACTIVE proxy, not the raw object. `x ??= y` returns the raw RHS
+      // (`y`), so mutating that would bypass reactivity (playingSlots/UI never update). Read it back.
+      if (!this.slots[account.id]) this.slots[account.id] = emptySlot(account)
+      return this.slots[account.id]
     },
     // Run `fn` with exclusive access on THIS slot only — bodies queued here execute strictly one
     // at a time, per account. Slot B's queue is entirely separate.
