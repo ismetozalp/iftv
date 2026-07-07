@@ -5,6 +5,7 @@ import { detectEncoders } from '@/adapters/cockpitEncoders'
 import { probeWritable as cockpitProbeWritable } from '@/adapters/cockpitCache'
 import type { EncoderTest, TranscodeMode } from '@/core/media/encoder'
 import { THEME_MODES, type ThemeMode } from '@/core/theme'
+import { DEFAULT_REPO } from '@/core/update/release'
 
 const DEFAULT_BUFFER_SECONDS = 30
 const MIN_BUFFER_SECONDS = 5
@@ -32,6 +33,7 @@ interface PersistedSettings {
   cacheLimitGb: number
   epgUrl: string
   themeMode: ThemeMode
+  updateRepo: string
 }
 
 function clampBufferSeconds(n: number): number {
@@ -51,6 +53,7 @@ export const useSettingsStore = defineStore('settings', {
     cacheLimitGb: DEFAULT_CACHE_LIMIT_GB,
     epgUrl: DEFAULT_EPG_URL as string,
     themeMode: DEFAULT_THEME_MODE as ThemeMode,
+    updateRepo: DEFAULT_REPO as string,
     _deps: null as Deps | null,
   }),
   actions: {
@@ -71,6 +74,7 @@ export const useSettingsStore = defineStore('settings', {
         cacheLimitGb: this.cacheLimitGb,
         epgUrl: this.epgUrl,
         themeMode: this.themeMode,
+        updateRepo: this.updateRepo,
       }
       await store.save('settings.json', value)
     },
@@ -84,6 +88,7 @@ export const useSettingsStore = defineStore('settings', {
         cacheLimitGb: DEFAULT_CACHE_LIMIT_GB,
         epgUrl: DEFAULT_EPG_URL,
         themeMode: DEFAULT_THEME_MODE,
+        updateRepo: DEFAULT_REPO,
       })
       this.bufferSeconds = clampBufferSeconds(loaded.bufferSeconds)
       this.transcodeMode = loaded.transcodeMode ?? DEFAULT_TRANSCODE_MODE
@@ -93,6 +98,11 @@ export const useSettingsStore = defineStore('settings', {
       this.epgUrl = loaded.epgUrl ?? DEFAULT_EPG_URL
       const loadedThemeMode = loaded.themeMode ?? DEFAULT_THEME_MODE
       this.themeMode = THEME_MODES.includes(loadedThemeMode) ? loadedThemeMode : DEFAULT_THEME_MODE
+      this.updateRepo = loaded.updateRepo || DEFAULT_REPO
+    },
+    async setUpdateRepo(repo: string) {
+      this.updateRepo = repo.trim() || DEFAULT_REPO
+      await this._persist()
     },
     async setBufferSeconds(n: number) {
       this.bufferSeconds = clampBufferSeconds(n)
