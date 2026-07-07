@@ -36,19 +36,23 @@ export const useUpdaterStore = defineStore('updater', {
         this.available = !!rel && !!this.current && isNewer(rel.version, this.current)
         if (manual && !rel) this.error = `No releases found at ${this.repo}.`
       } catch (e) {
+        // Clear any prior result so the UI never shows "update available" alongside an error.
+        this.latest = null
+        this.available = false
         if (manual) this.error = e instanceof Error ? e.message : String(e)
       } finally {
         this.checking = false
       }
     },
     async update() {
-      if (this.installing || !this.latest) return
+      if (this.installing || this.checking || !this.latest) return
+      const target = this.latest // pin the tag/version for the whole download+install
       this.installing = true
       this.error = ''
       this.log = []
       try {
-        const zip = await this._adapter.downloadReleaseZip(this.repo, this.latest.tag)
-        await this._adapter.runInstall(zip, this.latest.version, (line) => this.log.push(line))
+        const zip = await this._adapter.downloadReleaseZip(this.repo, target.tag)
+        await this._adapter.runInstall(zip, target.version, (line) => this.log.push(line))
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         this.error = msg

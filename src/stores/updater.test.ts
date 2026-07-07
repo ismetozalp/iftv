@@ -47,6 +47,28 @@ describe('updater store', () => {
     expect(u.error).toMatch(/no releases/i)
   })
 
+  it('check(): a throw clears any prior "available" state', async () => {
+    const u = useUpdaterStore()
+    let first = true
+    u.$configure(
+      fakeAdapter({
+        fetchLatestRelease: async () => {
+          if (first) {
+            first = false
+            return rel('1.1.0') // first check: update available
+          }
+          throw new Error('network down') // second check: fails
+        },
+      }),
+    )
+    await u.check(true)
+    expect(u.available).toBe(true)
+    await u.check(true)
+    expect(u.available).toBe(false)
+    expect(u.latest).toBeNull()
+    expect(u.error).toMatch(/network down/i)
+  })
+
   it('update(): streams the install log and marks installing', async () => {
     const u = useUpdaterStore()
     u.$configure(fakeAdapter({ fetchLatestRelease: async () => rel('1.1.0') }))

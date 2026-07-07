@@ -134,3 +134,7 @@ body { margin: 0; }
 .iftv-detail-poster-fallback { font-size: 2rem; font-weight: 600; color: var(--bs-secondary); }
 .iftv-detail-info { min-width: 0; }
 .iftv-update-log { max-height: 180px; overflow: auto; background: var(--bs-tertiary-bg); padding: 0.5rem; border-radius: 0.3rem; white-space: pre-wrap; }
+/* Header version badge (click = check for updates) + its update-available dot and confirm popover. */
+.iftv-badge-btn { text-decoration: none; font-weight: 600; }
+.iftv-badge-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bs-warning); margin-left: 0.3rem; vertical-align: middle; }
+.iftv-badge-pop { position: absolute; right: 0; top: 100%; z-index: 1080; min-width: 240px; box-shadow: 0 0.3rem 1rem rgba(0, 0, 0, 0.3); }
