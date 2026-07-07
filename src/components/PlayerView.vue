@@ -287,6 +287,7 @@ function onScrub(e: MouseEvent) {
           {{ (t.language || ('Sub ' + t.index)) + (t.text ? '' : ' (bitmap)') }}
         </option>
       </select>
+      <button class="btn btn-sm btn-light" title="Minimize" @click="player.minimize(slot.account)">—</button>
       <button class="btn btn-sm btn-light" @click="close">✕ Close</button>
     </div>
     <div v-if="full && liveNowNext?.now" class="iftv-epg-strip">
@@ -323,6 +324,14 @@ function onScrub(e: MouseEvent) {
       >
         <track ref="subTrack" kind="subtitles" label="Subtitles" default />
       </video>
+    </div>
+    <div v-if="minimizedActive" class="iftv-bar-chrome">
+      <span class="iftv-bar-title text-truncate">
+        {{ slot.item?.name }}<template v-if="liveNowNext?.now"> · {{ liveNowNext.now.title }}</template>
+      </span>
+      <button class="btn btn-sm btn-light" :title="paused ? 'Play' : 'Pause'" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
+      <button class="btn btn-sm btn-light" title="Restore" @click="player.restore(slot.account)">⤢</button>
+      <button class="btn btn-sm btn-light" title="Close" @click="close">✕</button>
     </div>
     <div v-if="full && slot.duration != null" class="iftv-seekbar">
       <button class="btn btn-sm btn-light" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
