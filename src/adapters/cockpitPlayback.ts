@@ -8,10 +8,13 @@ import { listSessionDirs as cacheListSessionDirs } from '@/adapters/cockpitCache
 export async function createCockpitPlaybackEngine(): Promise<PlaybackEngine> {
   const user = await cockpit.user()
   const root = resolveCacheRoot(user.home, useSettingsStore().cacheDir)
-  // Best-effort cleanup of stale session dirs from prior/crashed runs. Remove the whole
-  // cache root (a later session's `mkdir -p` recreates it). Pass the path as an argv element
-  // — no shell, so it can't be command-injected via an odd home dir — and AWAIT it so it
-  // can't race a subsequent session's mkdir.
+  // Reap orphaned playback processes from a prior crashed / abruptly-closed session BEFORE clearing
+  // the cache. Every ffmpeg/curl we spawn has this session cache `root` in its argv (playlist/segment
+  // /FIFO paths), so `pkill -f <root>` matches exactly our leftovers and never another user's ffmpeg.
+  // Directly-spawned (no shell) so pkill can't match its own parent. This is the guarantee that no
+  // ffmpeg lingers across the browser closing — cockpit kills them on a clean disconnect, and this
+  // catches anything a crash left behind, on the next load. Then wipe the cache dirs.
+  await cockpit.spawn(['pkill', '-9', '-f', root]).catch(() => {})
   await cockpit.spawn(['rm', '-rf', root]).catch(() => {})
 
   const deps: EngineDeps = {

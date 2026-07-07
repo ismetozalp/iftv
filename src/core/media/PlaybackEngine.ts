@@ -10,7 +10,7 @@ export interface PlaybackSession {
 }
 
 export interface PlaybackEngine {
-  start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null }): Promise<PlaybackSession>
+  start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null; cancelled?: () => boolean }): Promise<PlaybackSession>
 }
 
 export interface FfmpegProc {

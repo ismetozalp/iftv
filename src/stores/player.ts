@@ -150,7 +150,7 @@ export const usePlayerStore = defineStore('player', {
     },
     // Start the session, and if an nvenc attempt throws, retry ONCE with x264 before surfacing
     // the error — a runtime GPU failure (driver/session-limit/etc.) shouldn't strand playback.
-    async _startWithFallback(slot: Slot, account: Account, item: ContentItem, opts: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null }): Promise<PlaybackSession> {
+    async _startWithFallback(slot: Slot, account: Account, item: ContentItem, opts: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null; cancelled?: () => boolean }): Promise<PlaybackSession> {
       const engine = await this._engine()
       try {
         return await engine.start(account, item, opts)
@@ -200,7 +200,7 @@ export const usePlayerStore = defineStore('player', {
             } catch { /* discovery is best-effort — start playback regardless */ }
             if (gen !== slot._mx.gen) return // superseded during discovery
           }
-          const session = await this._startWithFallback(slot, account, item, { bufferSeconds, startOffsetSeconds: slot.startOffset, videoCodec: this._resolveVideoCodec(slot), audioIndex: slot.selectedAudio, subtitleIndex: slot.selectedSubtitle })
+          const session = await this._startWithFallback(slot, account, item, { bufferSeconds, startOffsetSeconds: slot.startOffset, videoCodec: this._resolveVideoCodec(slot), audioIndex: slot.selectedAudio, subtitleIndex: slot.selectedSubtitle, cancelled: () => gen !== slot._mx.gen })
           if (gen !== slot._mx.gen) { await session.stop(); return } // superseded while starting
           slot.session = session
           slot.currentCodec = this._resolveVideoCodec(slot)
@@ -232,7 +232,7 @@ export const usePlayerStore = defineStore('player', {
         await this.sleep(SETTLE_MS) // let the panel see the drop before reconnecting
         if (gen !== slot._mx.gen) return // superseded during settle → the newer op will start
         try {
-          const session = await this._startWithFallback(slot, account, item, { bufferSeconds, startOffsetSeconds: opts.offsetSeconds, videoCodec: this._resolveVideoCodec(slot), audioIndex: slot.selectedAudio, subtitleIndex: slot.selectedSubtitle })
+          const session = await this._startWithFallback(slot, account, item, { bufferSeconds, startOffsetSeconds: opts.offsetSeconds, videoCodec: this._resolveVideoCodec(slot), audioIndex: slot.selectedAudio, subtitleIndex: slot.selectedSubtitle, cancelled: () => gen !== slot._mx.gen })
           if (gen !== slot._mx.gen) { await session.stop(); return }
           slot.session = session
           slot.startOffset = opts.offsetSeconds
@@ -303,25 +303,34 @@ export const usePlayerStore = defineStore('player', {
     async stop(account: Account | null = useWorkspaceStore().activeAccount) {
       if (!account) return
       const slot = this._slot(account)
-      ++slot._mx.gen // supersede any in-flight play/seek so it won't start a session
-      await this._exclusive(slot, async () => {
-        const s = slot.session
-        slot.session = null
-        slot.item = null
-        slot.status = 'idle'
-        slot.error = ''
-        slot.duration = null
-        slot.startOffset = 0
-        slot.transcode = false
-        slot._forceSoftware = false
-        slot.currentCodec = 'copy'
-        slot.audioTracks = []
-        slot.subtitleTracks = []
-        slot.selectedAudio = 0
-        slot.selectedSubtitle = null
-        slot.minimized = false
-        if (s) await s.stop()
-      })
+      // Supersede any in-flight play/seek — its `cancelled` guard bails its start loop and kills the
+      // just-spawned curl/ffmpeg promptly instead of running the full playlist-poll timeout.
+      ++slot._mx.gen
+      const s = slot.session
+      // Reset the VISIBLE state synchronously so the player closes instantly (the reactive status
+      // flip unmounts the PlayerView now), even if a stuck start is still tearing down below.
+      slot.session = null
+      slot.item = null
+      slot.status = 'idle'
+      slot.error = ''
+      slot.duration = null
+      slot.startOffset = 0
+      slot.transcode = false
+      slot._forceSoftware = false
+      slot.currentCodec = 'copy'
+      slot.audioTracks = []
+      slot.subtitleTracks = []
+      slot.selectedAudio = 0
+      slot.selectedSubtitle = null
+      slot.minimized = false
+      // Kill the (already-hidden) session's processes serialized behind the mutex. The UI is already
+      // closed; a superseded in-flight start releases the lock fast now that its poll is cancellable.
+      await this._exclusive(slot, async () => { if (s) await s.stop() })
+    },
+    // Stop every playing account — used on page unload so no ffmpeg/curl is left behind (cockpit
+    // also kills them on disconnect; this initiates a clean teardown proactively).
+    async stopAll() {
+      await Promise.all(this.playingSlots.map((slot) => this.stop(slot.account)))
     },
     // Fatal playback failure: kill the ffmpeg session but keep the overlay showing the error.
     async fail(message: string, account: Account | null = useWorkspaceStore().activeAccount) {

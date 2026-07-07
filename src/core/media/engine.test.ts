@@ -51,6 +51,20 @@ describe('createPlaybackEngine.start', () => {
     expect(typeof s.createLoader()).toBe('function')
   })
 
+  it('cancels a superseded start immediately — kills the spawned procs and cleans up, no long poll', async () => {
+    const closes: string[] = []
+    let cancel = false
+    const d = deps({
+      readFile: vi.fn(async () => new Uint8Array()), // playlist never appears → it would poll
+      spawn: vi.fn(() => ({ close: (p: string) => closes.push(p) })),
+    })
+    const promise = createPlaybackEngine(d).start(XT, item, { cancelled: () => cancel })
+    cancel = true // supersede before the poll gets going (e.g. user hit Close)
+    await expect(promise).rejects.toThrow(/cancelled/)
+    expect(closes.length).toBeGreaterThan(0) // curl + ffmpeg were closed (killed)
+    expect(d.rmrf).toHaveBeenCalledWith('/home/u/.cache/inflighttv/sid') // session dir cleaned up
+  })
+
   it('uses a rolling live window for live, and a realtime-paced keep-all VOD event playlist for a movie', async () => {
     const dLive = deps()
     const sLive = await createPlaybackEngine(dLive).start(XT, item) // kind: 'live'

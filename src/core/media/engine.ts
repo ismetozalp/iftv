@@ -12,7 +12,7 @@ const PLAYLIST_INTERVAL_MS = 500
 
 export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
   return {
-    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null }): Promise<PlaybackSession> {
+    async start(account: Account, item: ContentItem, opts?: { bufferSeconds?: number; startOffsetSeconds?: number; videoCodec?: 'copy' | 'nvenc' | 'x264'; audioIndex?: number; subtitleIndex?: number | null; cancelled?: () => boolean }): Promise<PlaybackSession> {
       const inputUrl = playbackUrl(account, item)
       if (!inputUrl) throw new Error('This item is not playable')
 
@@ -64,6 +64,13 @@ export function createPlaybackEngine(deps: EngineDeps): PlaybackEngine {
       const pl = playlistPath(dir)
       let ready = false
       for (let i = 0; i < PLAYLIST_TRIES; i++) {
+        // Bail immediately if this start was superseded (e.g. the user hit Close / switched channel)
+        // — kill the just-spawned curl/ffmpeg now instead of blocking up to PLAYLIST_TRIES*interval.
+        if (opts?.cancelled?.()) {
+          stopAll('cancelled')
+          await deps.rmrf(dir)
+          throw new Error('cancelled')
+        }
         const data = await deps.readFile(pl)
         if (data && data.byteLength > 0) { ready = true; break }
         await deps.wait(PLAYLIST_INTERVAL_MS)

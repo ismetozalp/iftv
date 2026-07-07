@@ -11,6 +11,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useCollectionsStore } from '@/stores/collections'
 import { useEpgStore } from '@/stores/epg'
 import { useUpdaterStore } from '@/stores/updater'
+import { usePlayerStore } from '@/stores/player'
 import { initTheme, reapplyTheme } from '@/composables/useTheme'
 
 const ws = useWorkspaceStore()
@@ -18,6 +19,7 @@ const settings = useSettingsStore()
 const collections = useCollectionsStore()
 const epg = useEpgStore()
 const updater = useUpdaterStore()
+const player = usePlayerStore()
 const settingsOpen = ref(false)
 const updateConfirm = ref(false) // inline confirm popover under the badge
 const updateJustChecked = ref(false) // show the "up to date" note only right after a manual click
@@ -59,6 +61,11 @@ onMounted(() => {
   // Silent update check ~4s after load — the badge shows a dot if a newer release exists.
   const t = setTimeout(() => updater.startupCheck(), 4000)
   onBeforeUnmount(() => clearTimeout(t))
+  // Proactively tear down all playback when the page is being unloaded (tab close, navigate away,
+  // refresh) so no ffmpeg/curl lingers. `pagehide` is more reliable than `beforeunload` here.
+  const onHide = () => { void player.stopAll() }
+  window.addEventListener('pagehide', onHide)
+  onBeforeUnmount(() => window.removeEventListener('pagehide', onHide))
 })
 watch(() => settings.themeMode, (m) => reapplyTheme(m))
 // Opening / switching to an account ensures its guide is loaded (TTL-cached).
