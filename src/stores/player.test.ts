@@ -505,8 +505,9 @@ describe('usePlayerStore', () => {
       await p.play(ACCT, item)
       const edited = { ...ACCT, url: 'http://new-host', password: 'changed' } // same id, new object (as updateAccount produces)
       await p.play(edited, item)
-      expect(p.slots[ACCT.id].account).toBe(edited) // slot tracks the latest → seek/track-change reconnect with fresh creds
+      // slot tracks the latest object's values → seek/track-change reconnect with fresh creds (assert by value; Pinia proxies the object)
       expect(p.slots[ACCT.id].account.url).toBe('http://new-host')
+      expect(p.slots[ACCT.id].account.password).toBe('changed')
     })
 
     it('stop(A) leaves B playing', async () => {
