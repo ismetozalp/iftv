@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useSettingsStore, DEFAULT_EPG_URL } from './settings'
 import { createMemoryStore } from '@/core/storage/appState'
+import type { ThemeMode } from '@/core/theme'
 
 describe('useSettingsStore', () => {
   beforeEach(() => setActivePinia(createPinia()))
@@ -41,6 +42,7 @@ describe('useSettingsStore', () => {
       cacheDir: '',
       cacheLimitGb: 5,
       epgUrl: DEFAULT_EPG_URL,
+      themeMode: 'system',
     })
   })
 
@@ -311,5 +313,57 @@ describe('useSettingsStore', () => {
     const r = await s.setEpgUrl('not a url')
     expect(r.ok).toBe(false)
     expect(s.epgUrl).toBe(DEFAULT_EPG_URL)
+  })
+
+  it('defaults themeMode to system before loading', () => {
+    const s = useSettingsStore()
+    expect(s.themeMode).toBe('system')
+  })
+
+  it('load reads a persisted themeMode from the store', async () => {
+    const store = createMemoryStore({ 'settings.json': { bufferSeconds: 45, themeMode: 'dark' } })
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    expect(s.themeMode).toBe('dark')
+  })
+
+  it('load back-compat: an old settings.json without themeMode defaults it to system', async () => {
+    const store = createMemoryStore({ 'settings.json': { bufferSeconds: 45 } })
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    expect(s.themeMode).toBe('system')
+  })
+
+  it('load coerces an invalid persisted themeMode to system', async () => {
+    const store = createMemoryStore({ 'settings.json': { bufferSeconds: 45, themeMode: 'bogus' } })
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    expect(s.themeMode).toBe('system')
+  })
+
+  it('setThemeMode updates state and persists it', async () => {
+    const store = createMemoryStore()
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    await s.setThemeMode('dark')
+    expect(s.themeMode).toBe('dark')
+
+    const s2 = useSettingsStore()
+    s2.$configure({ store })
+    await s2.load()
+    expect(s2.themeMode).toBe('dark')
+  })
+
+  it('setThemeMode ignores an invalid mode and leaves themeMode unchanged', async () => {
+    const store = createMemoryStore()
+    const s = useSettingsStore()
+    s.$configure({ store })
+    await s.load()
+    await s.setThemeMode('bogus' as ThemeMode)
+    expect(s.themeMode).toBe('system')
   })
 })

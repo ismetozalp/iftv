@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView } from 'vue-router'
 import AccountTabBar from '@/components/AccountTabBar.vue'
 import PlayerView from '@/components/PlayerView.vue'
@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useSettingsStore } from '@/stores/settings'
 import { useCollectionsStore } from '@/stores/collections'
 import { useEpgStore } from '@/stores/epg'
+import { initTheme, reapplyTheme } from '@/composables/useTheme'
 
 const ws = useWorkspaceStore()
 const settings = useSettingsStore()
@@ -21,7 +22,10 @@ onMounted(() => {
   void settings.load()
   void collections.load()
   void epg.load().then(() => epg.ensureFresh())
+  const stopTheme = initTheme(() => settings.themeMode)
+  onBeforeUnmount(stopTheme)
 })
+watch(() => settings.themeMode, (m) => reapplyTheme(m))
 // One shared clock (not one per card) so EPG now/next lines roll over without a full refresh.
 const epgClock = setInterval(() => epg.tick(), 60000)
 onBeforeUnmount(() => clearInterval(epgClock))
