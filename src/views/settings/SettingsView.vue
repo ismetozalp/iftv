@@ -3,7 +3,6 @@ import { ref, watch } from 'vue'
 import cockpit from 'cockpit'
 import { useSettingsStore } from '@/stores/settings'
 import { usePlayerStore } from '@/stores/player'
-import { useEpgStore } from '@/stores/epg'
 import { useUpdaterStore } from '@/stores/updater'
 import { resolveCacheRoot } from '@/core/media/session'
 import { cacheSizeBytes, clearCache } from '@/adapters/cockpitCache'
@@ -18,7 +17,6 @@ const emit = defineEmits<{ close: [] }>()
 
 const settings = useSettingsStore()
 const player = usePlayerStore()
-const epg = useEpgStore()
 const updater = useUpdaterStore()
 
 function onInput(e: Event) {
@@ -64,30 +62,10 @@ async function refreshCache() {
   cacheSizeLabel.value = formatBytes(b)
 }
 
-// TV Guide (EPG)
-const epgUrlInput = ref(settings.epgUrl)
-const epgError = ref('')
-
-function formatRelative(ms: number): string {
-  if (!ms) return 'never'
-  const diffSec = Math.max(0, Math.round((Date.now() - ms) / 1000))
-  if (diffSec < 60) return 'just now'
-  const diffMin = Math.round(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.round(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  return `${Math.round(diffHr / 24)}d ago`
-}
-
 watch(
   () => props.open,
   (isOpen) => {
-    if (isOpen) {
-      void refreshCache()
-      // Same rationale as cacheDirInput: re-sync from the store on each open so a saved value
-      // isn't clobbered by a stale ref snapshotted before settings.load() resolved at boot.
-      epgUrlInput.value = settings.epgUrl
-    }
+    if (isOpen) void refreshCache()
   },
   { immediate: true },
 )
@@ -106,15 +84,6 @@ async function onCacheLimit(e: Event) {
 async function onClearCache() {
   await clearCache(resolvedRoot.value)
   await refreshCache()
-}
-
-async function onSaveEpgUrl() {
-  const r = await settings.setEpgUrl(epgUrlInput.value)
-  epgError.value = r.ok ? '' : (r.error ?? 'Invalid')
-}
-
-async function onRefreshEpgNow() {
-  await epg.refresh()
 }
 
 // Backup & restore
@@ -282,30 +251,6 @@ function close() {
             Clear cache now
           </button>
         </div>
-      </div>
-      <div class="mt-3">
-        <h5>TV Guide (EPG)</h5>
-        <label for="iftv-epg-url" class="form-label">Default EPG URL (XMLTV, optional gzip)</label>
-        <div class="d-flex align-items-center gap-2">
-          <input
-            id="iftv-epg-url"
-            class="form-control"
-            placeholder="https://…/epg.xml.gz (optional)"
-            v-model="epgUrlInput"
-          />
-          <button class="btn btn-sm btn-outline-secondary" @click="onSaveEpgUrl">Save</button>
-        </div>
-        <small class="text-muted">Fallback used only for accounts that don't have their own EPG (each account can set its own, and Xtream/M3U guides are auto-detected). Empty = no fallback.</small>
-        <div class="text-danger small" v-if="epgError">{{ epgError }}</div>
-        <div class="d-flex align-items-center gap-2 mt-2">
-          <button class="btn btn-sm btn-outline-secondary" :disabled="epg.isLoading()" @click="onRefreshEpgNow">
-            {{ epg.isLoading() ? 'Refreshing…' : 'Refresh now' }}
-          </button>
-          <span class="text-muted small">
-            Last updated: {{ formatRelative(epg.loadedAtFor()) }} · {{ epg.channelCountFor() }} channels
-          </span>
-        </div>
-        <div class="text-danger small" v-if="epg.errorFor()">{{ epg.errorFor() }}</div>
       </div>
       <div class="mt-3">
         <h5>Backup & restore</h5>

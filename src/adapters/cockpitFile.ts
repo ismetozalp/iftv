@@ -14,6 +14,10 @@ export async function createCockpitStore(): Promise<JsonStore> {
       try {
         const content = await handle.read()
         return content ?? fallback
+      } catch {
+        // Unreadable / corrupted JSON (e.g. a truncated write from a crash or restart) → treat as
+        // empty rather than throwing and breaking the store. The next save writes a clean file.
+        return fallback
       } finally {
         handle.close()
       }
