@@ -236,6 +236,14 @@ function updatePlayhead() {
   nowMs.value = Date.now()
 }
 
+// `timeupdate` fires only when the playback position advances — i.e. we ARE playing, not buffering.
+// `buffering` is otherwise a latch cleared only by @playing/@canplay, which don't re-fire when the
+// video silently resumes (e.g. after being hidden on another account's tab), so clear it here too.
+function onTimeupdate() {
+  if (buffering.value) buffering.value = false
+  updatePlayhead()
+}
+
 // Live now-playing strip: matched programme + progress, recomputed off nowMs (bumped each
 // timeupdate/progress tick above) so the bar advances roughly once per second while playing.
 const liveNowNext = computed(() => {
@@ -300,10 +308,6 @@ function onScrub(e: MouseEvent) {
       <template v-if="full">
         <p v-if="slot.status === 'starting'" class="text-light p-3">Starting stream…</p>
         <p v-else-if="slot.status === 'error'" class="text-danger p-3">{{ slot.error }}</p>
-        <div v-else-if="buffering" class="iftv-player-buffering">
-          <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-          Buffering…
-        </div>
       </template>
       <video
         ref="video"
@@ -316,7 +320,7 @@ function onScrub(e: MouseEvent) {
         @stalled="buffering = true"
         @playing="buffering = false"
         @canplay="buffering = false"
-        @timeupdate="updatePlayhead"
+        @timeupdate="onTimeupdate"
         @progress="updatePlayhead"
         @play="paused = false"
         @pause="paused = true"
@@ -324,6 +328,11 @@ function onScrub(e: MouseEvent) {
       >
         <track ref="subTrack" kind="subtitles" label="Subtitles" default />
       </video>
+      <!-- Compact indicator in the bottom-right corner (over the video), not a centered overlay. -->
+      <div v-if="full && buffering && slot.status === 'playing'" class="iftv-buffering-corner">
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        Buffering…
+      </div>
     </div>
     <div v-if="minimizedActive" class="iftv-bar-chrome">
       <span class="iftv-bar-title text-truncate">

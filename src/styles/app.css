@@ -105,11 +105,12 @@ body { margin: 0; }
   font-size: 0.75rem; color: #cde; background: rgba(255, 255, 255, 0.08);
   padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap;
 }
-.iftv-player-buffering {
-  position: absolute; z-index: 2; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  display: inline-flex; align-items: center; gap: 0.5rem;
-  padding: 0.5rem 1rem; border-radius: 0.5rem;
-  background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 0.9rem; pointer-events: none;
+/* Compact buffering indicator, docked to the bottom-right corner of the player (over the video). */
+.iftv-buffering-corner {
+  position: absolute; z-index: 2; right: 0.75rem; bottom: 0.75rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.3rem 0.6rem; border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.65); color: #fff; font-size: 0.8rem; pointer-events: none;
 }
 
 .iftv-epg-strip { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.3rem 0.75rem; background: #111; color: #cde; }
