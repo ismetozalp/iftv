@@ -136,12 +136,15 @@ async function onExport() {
     backupError.value = "Passwords don't match"
     return
   }
-  const env = await encryptBackup(buildBundle(await gatherFiles(), Date.now()), exportPw.value)
-  downloadTextFile(`inflighttv-backup-${ymd()}.iftv`, env)
-  backupMsg.value = 'Backup downloaded.'
-  exportPw.value = ''
-  exportPw2.value = ''
-  backupError.value = ''
+  try {
+    const env = await encryptBackup(buildBundle(await gatherFiles(), Date.now()), exportPw.value)
+    downloadTextFile(`inflighttv-backup-${ymd()}.iftv`, env)
+    backupMsg.value = 'Backup downloaded.'
+    exportPw.value = ''
+    exportPw2.value = ''
+  } catch {
+    backupError.value = 'Could not create the backup.'
+  }
 }
 
 function onImportFile(e: Event) {
@@ -158,10 +161,16 @@ async function onImport() {
     files = parseBundle(plain).files
   } catch {
     backupError.value = "Incorrect password or not a valid In-flight TV backup file."
+    importPw.value = ''
     return
   }
   if (!confirm('This will REPLACE your accounts, settings, library and tabs with the backup. Continue?')) return
-  await restoreFiles(files)
+  try {
+    await restoreFiles(files)
+  } catch {
+    backupError.value = 'Restore failed while writing files — nothing may be reloaded.'
+    return
+  }
   window.location.reload()
 }
 
