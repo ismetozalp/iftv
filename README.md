@@ -122,28 +122,72 @@ package path.
 
 **Fedora / RHEL / Rocky / Alma / CentOS Stream**
 ```bash
-sudo dnf install cockpit ffmpeg
+sudo dnf install cockpit
 sudo systemctl enable --now cockpit.socket
 sudo firewall-cmd --add-service=cockpit --permanent && sudo firewall-cmd --reload
 ```
 
 **Debian / Ubuntu / derivatives**
 ```bash
-sudo apt update && sudo apt install cockpit ffmpeg
+sudo apt update && sudo apt install cockpit
 sudo systemctl enable --now cockpit.socket
 # If UFW is enabled: sudo ufw allow 9090/tcp
 ```
 
 **Arch / Manjaro**
 ```bash
-sudo pacman -S cockpit ffmpeg
+sudo pacman -S cockpit
 sudo systemctl enable --now cockpit.socket
+```
+
+**openSUSE Tumbleweed / Leap**
+```bash
+sudo zypper install cockpit
+sudo systemctl enable --now cockpit.socket
+sudo firewall-cmd --permanent --add-service=cockpit && sudo firewall-cmd --reload
 ```
 
 Then open `https://<server-ip>:9090` and log in with any local Linux account
 (the self-signed cert warning is expected).
 
-### 2. Install the InFlight TV plugin
+### 2. Install ffmpeg (required for playback)
+
+InFlight TV remuxes/transcodes every stream on the host with `ffmpeg` (plus
+`curl`), so the browser only ever receives plain HLS. Install it per distro:
+
+**Fedora**
+```bash
+sudo dnf install ffmpeg   # (enable RPM Fusion first if needed — see below)
+```
+
+**RHEL / Rocky / Alma / CentOS Stream** — `ffmpeg` lives in RPM Fusion:
+```bash
+sudo dnf install https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm
+sudo dnf install ffmpeg
+```
+
+**Debian / Ubuntu / derivatives**
+```bash
+sudo apt install ffmpeg curl
+```
+
+**Arch / Manjaro**
+```bash
+sudo pacman -S ffmpeg curl
+```
+
+**openSUSE** — `ffmpeg` is in Packman:
+```bash
+sudo zypper install ffmpeg curl
+```
+
+**GPU (NVENC) transcoding is optional.** For hardware H.264 encoding you need the
+NVIDIA driver and an `ffmpeg` built with `h264_nvenc`. Check with
+`ffmpeg -encoders | grep nvenc`. If it's missing, InFlight TV automatically falls
+back to CPU (`libx264`) — nothing to configure. Settings → **Video transcoding →
+Test encoders** shows exactly what your host supports.
+
+### 3. Install the InFlight TV plugin
 
 From a release zip:
 ```bash
@@ -164,6 +208,23 @@ make help               # list all targets
 
 Reload Cockpit in the browser and look under **Tools → InFlight TV**. Add your
 Xtream account or M3U URL under **＋ Accounts**.
+
+## Updating
+
+InFlight TV can update itself from its GitHub releases.
+
+- The version **badge** in the top-right (e.g. **IF TV v1.0.0**) checks for updates
+  when clicked. If a newer release exists it asks to confirm, then downloads it,
+  installs it, and restarts Cockpit. A small dot on the badge means an update was
+  found by the silent check that runs shortly after load.
+- **Settings → Plugin update** does the same and lets you set the source repo
+  (default **`ismetozalp/iftv`**), see the installed version, and watch the install
+  log. **Update & restart Cockpit** applies it.
+
+The update downloads the release's `inflighttv-<version>.zip`, copies it into
+`/usr/share/cockpit/inflighttv/` (Cockpit will prompt for admin rights), and
+restarts Cockpit — reload the page once it returns. It never touches your saved
+accounts or settings. Requires `curl` (and uses the GitHub CLI `gh` if present).
 
 ## Develop
 
