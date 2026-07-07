@@ -10,6 +10,10 @@ browser can't decode on its own.
 
 > Named for Cockpit ("in-flight"). It is **not** for aircraft use.
 
+> 👉 **Check out my other plugin — [Explorer](https://github.com/ismetozalp/explorer)**,
+> a Cockpit plugin that turns the web console into a full file manager: browse, edit,
+> preview, search, terminals, and Git, plus fstab/mounts, SMB & NFS shares, and a GRUB editor.
+
 **Highlights**
 
 - 📺 **Live TV, Movies & Series** from Xtream Codes panels or M3U playlists —
@@ -176,12 +180,6 @@ npm run typecheck   # vue-tsc
 npm run test:smoke  # SPA smoke (Playwright)
 make test           # test + typecheck
 ```
-
-## Check out my other plugin
-
-If you like this, you might like **[Explorer](https://github.com/ismetozalp/explorer)** —
-another Cockpit plugin that turns the web console into a full file manager: browse, edit,
-preview, search, terminals, and Git, plus fstab/mounts, SMB & NFS shares, and a GRUB editor.
 
 ## License
 
