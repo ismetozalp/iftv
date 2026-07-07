@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeRepo, parseVersion, isNewer, pickAsset, DEFAULT_REPO } from './release'
+import { normalizeRepo, parseVersion, isNewer, pickAsset, isSafeTag, DEFAULT_REPO } from './release'
 
 describe('normalizeRepo', () => {
   it('passes through owner/repo', () => expect(normalizeRepo('ismetozalp/iftv')).toBe('ismetozalp/iftv'))
@@ -8,6 +8,16 @@ describe('normalizeRepo', () => {
   it('extracts from a releases URL', () => expect(normalizeRepo('https://github.com/a/b/releases/latest')).toBe('a/b'))
   it('falls back to the default when empty', () => expect(normalizeRepo('   ')).toBe(DEFAULT_REPO))
   it('falls back to the default when not owner/repo', () => expect(normalizeRepo('justoneword')).toBe(DEFAULT_REPO))
+  it('rejects shell metacharacters → default', () => expect(normalizeRepo('a;rm -rf/b')).toBe(DEFAULT_REPO))
+  it('rejects a space in a segment → default', () => expect(normalizeRepo('a b/c')).toBe(DEFAULT_REPO))
+  it('rejects a leading-dash owner → default', () => expect(normalizeRepo('-flag/repo')).toBe(DEFAULT_REPO))
+})
+
+describe('isSafeTag', () => {
+  it('accepts vX.Y.Z', () => expect(isSafeTag('v1.2.3')).toBe(true))
+  it('accepts a plain number tag', () => expect(isSafeTag('2024.01')).toBe(true))
+  it('rejects a leading dash (flag smuggling)', () => expect(isSafeTag('-rf')).toBe(false))
+  it('rejects shell metacharacters', () => expect(isSafeTag('v1;reboot')).toBe(false))
 })
 
 describe('parseVersion', () => {

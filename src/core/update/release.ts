@@ -13,9 +13,19 @@ export function normalizeRepo(input: string): string {
   if (m) r = m[1]
   else r = r.split(/[#?]/)[0] // drop any query/hash on a bare owner/repo
   r = r.replace(/\.git$/i, '').replace(/\/+$/, '')
-  // Keep only the first two path segments (owner/repo); anything else → default.
+  // Keep only the first two path segments (owner/repo). Each must be a plain GitHub-ish slug
+  // ([A-Za-z0-9._-]) — this rejects spaces, shell metacharacters, and leading '-' so the value is
+  // safe to place in an argv/URL (no command- or argument-injection). Anything else → default.
   const parts = r.split('/').filter(Boolean)
-  return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : DEFAULT_REPO
+  const seg = /^[A-Za-z0-9][A-Za-z0-9._-]*$/ // must start alphanumeric (rejects leading '-'/'.')
+  if (parts.length >= 2 && seg.test(parts[0]) && seg.test(parts[1])) return `${parts[0]}/${parts[1]}`
+  return DEFAULT_REPO
+}
+
+// A release tag safe to pass as an argv (e.g. to `gh release download`): starts alphanumeric,
+// then word/dot/plus/hyphen. Rejects leading '-' (flag smuggling) and shell metacharacters.
+export function isSafeTag(tag: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(String(tag))
 }
 
 export function parseVersion(v: string): number[] {
