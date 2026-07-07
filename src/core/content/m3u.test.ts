@@ -14,7 +14,7 @@ describe('parseM3u', () => {
   it('parses channels with name/logo/group and the stream url', () => {
     const { items } = parseM3u(SAMPLE)
     expect(items).toHaveLength(3)
-    expect(items[0]).toEqual({ id: 'm:0', kind: 'live', name: 'CNN HD', logo: 'http://l/cnn.png', categoryId: 'News', streamId: null, seriesId: null, containerExtension: null, url: 'http://s/cnn.m3u8' })
+    expect(items[0]).toEqual({ id: 'm:0', kind: 'live', name: 'CNN HD', logo: 'http://l/cnn.png', epgId: 'cnn', categoryId: 'News', streamId: null, seriesId: null, containerExtension: null, url: 'http://s/cnn.m3u8' })
     expect(items[1].categoryId).toBe('News')
     expect(items[1].url).toBe('http://s/bbc.ts')
   })
@@ -33,7 +33,7 @@ describe('parseM3u', () => {
     expect(items[0].name).toBe('Real')
   })
   it('returns empty for a body with no entries', () => {
-    expect(parseM3u('#EXTM3U\n')).toEqual({ categories: [], items: [] })
+    expect(parseM3u('#EXTM3U\n')).toEqual({ categories: [], items: [], tvgUrl: '' })
   })
   it('handles commas inside attribute values and inside the title', () => {
     const { items } = parseM3u('#EXTM3U\n#EXTINF:-1 tvg-name="X" group-title="Sports, Live",News, Weekend\nhttp://s/nw\n')

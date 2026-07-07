@@ -7,15 +7,16 @@ import type { ContentItem } from '@/core/content/types'
 
 const ACCT: Account = { id: 'a', type: 'xtream', name: 'X', url: 'http://h', username: 'u', password: 'p', createdAt: 1 }
 const CHANS: ContentItem[] = [
-  { id: 'x:live:1', kind: 'live', name: 'CNN', logo: '', categoryId: '1', streamId: '1', seriesId: null, containerExtension: null, url: null },
-  { id: 'x:live:2', kind: 'live', name: 'BBC News', logo: '', categoryId: '1', streamId: '2', seriesId: null, containerExtension: null, url: null },
-  { id: 'x:live:3', kind: 'live', name: 'ESPN', logo: '', categoryId: '2', streamId: '3', seriesId: null, containerExtension: null, url: null },
+  { id: 'x:live:1', kind: 'live', name: 'CNN', logo: '', epgId: '', categoryId: '1', streamId: '1', seriesId: null, containerExtension: null, url: null },
+  { id: 'x:live:2', kind: 'live', name: 'BBC News', logo: '', epgId: '', categoryId: '1', streamId: '2', seriesId: null, containerExtension: null, url: null },
+  { id: 'x:live:3', kind: 'live', name: 'ESPN', logo: '', epgId: '', categoryId: '2', streamId: '3', seriesId: null, containerExtension: null, url: null },
 ]
 function fakeProvider(): ContentProvider {
   return {
     getCategories: vi.fn(async () => [{ id: '1', name: 'News' }, { id: '2', name: 'Sports' }]),
     getItems: vi.fn(async (catId) => CHANS.filter((c) => c.categoryId === catId)),
     getAllItems: vi.fn(async () => CHANS),
+    getTvgUrl: vi.fn(async () => ''),
   }
 }
 
@@ -82,7 +83,7 @@ describe('useLibraryStore', () => {
 
   it('records an error when the provider throws', async () => {
     const s = useLibraryStore()
-    s.$configure({ makeProvider: () => ({ getCategories: async () => { throw new Error('boom') }, getItems: async () => [], getAllItems: async () => [] }) })
+    s.$configure({ makeProvider: () => ({ getCategories: async () => { throw new Error('boom') }, getItems: async () => [], getAllItems: async () => [], getTvgUrl: async () => '' }) })
     await s.setContext(ACCT, 'live')
     expect(s.error).toMatch(/boom/)
   })

@@ -5,7 +5,7 @@ import type { Account } from '@/core/accounts/accounts'
 import type { ContentItem } from '@/core/content/types'
 
 const XT: Account = { id: 'a', type: 'xtream', name: 'X', url: 'http://h:8080', username: 'u', password: 'p', createdAt: 1 }
-const item: ContentItem = { id: 'x:live:7', kind: 'live', name: 'C', logo: '', categoryId: '1', streamId: '7', seriesId: null, containerExtension: null, url: null }
+const item: ContentItem = { id: 'x:live:7', kind: 'live', name: 'C', logo: '', epgId: '', categoryId: '1', streamId: '7', seriesId: null, containerExtension: null, url: null }
 
 function deps(over: Partial<EngineDeps> = {}): EngineDeps {
   return {

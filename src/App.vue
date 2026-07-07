@@ -38,10 +38,15 @@ async function confirmUpdate() {
 // Header height varies (tabs wrap with many accounts), so publish it as a CSS var the player reads.
 const headerEl = ref<HTMLElement>()
 onMounted(() => {
-  void ws.init()
-  void settings.load()
   void collections.load()
-  void epg.load().then(() => epg.ensureFresh())
+  // EPG is per-account now: wait for accounts/tabs + settings (both feed URL resolution), rebuild
+  // every account's cached index, then refresh each OPEN account (each resolves its own guide —
+  // manual URL / panel xmltv.php / M3U url-tvg / global fallback).
+  void Promise.all([ws.init(), settings.load()])
+    .then(() => epg.load())
+    .then(() => {
+      for (const acc of ws.openTabs) void epg.ensureFresh(acc)
+    })
   const stopTheme = initTheme(() => settings.themeMode)
   onBeforeUnmount(stopTheme)
   if (headerEl.value) {
@@ -56,6 +61,8 @@ onMounted(() => {
   onBeforeUnmount(() => clearTimeout(t))
 })
 watch(() => settings.themeMode, (m) => reapplyTheme(m))
+// Opening / switching to an account ensures its guide is loaded (TTL-cached).
+watch(() => ws.activeAccount?.id, () => { if (ws.activeAccount) void epg.ensureFresh(ws.activeAccount) })
 // One shared clock (not one per card) so EPG now/next lines roll over without a full refresh.
 const epgClock = setInterval(() => epg.tick(), 60000)
 onBeforeUnmount(() => clearInterval(epgClock))

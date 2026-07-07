@@ -21,7 +21,7 @@ describe('getVodStreams', () => {
       { name: 'no id', category_id: '10' },
     ])
     expect(await getVodStreams(t, 'http://h', 'u', 'p')).toEqual([
-      { id: 'x:movie:55', kind: 'movie', name: 'The Movie', logo: 'http://p/m.jpg', categoryId: '10', streamId: '55', seriesId: null, containerExtension: 'mp4', url: null },
+      { id: 'x:movie:55', kind: 'movie', name: 'The Movie', logo: 'http://p/m.jpg', epgId: '', categoryId: '10', streamId: '55', seriesId: null, containerExtension: 'mp4', url: null },
     ])
   })
   it('includes category_id param when given; omits otherwise', async () => {

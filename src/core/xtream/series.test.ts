@@ -21,7 +21,7 @@ describe('getSeries', () => {
       { name: 'no id', category_id: '20' },
     ])
     expect(await getSeries(t, 'http://h', 'u', 'p')).toEqual([
-      { id: 'x:series:77', kind: 'series', name: 'The Show', logo: 'http://p/s.jpg', categoryId: '20', streamId: null, seriesId: '77', containerExtension: null, url: null },
+      { id: 'x:series:77', kind: 'series', name: 'The Show', logo: 'http://p/s.jpg', epgId: '', categoryId: '20', streamId: null, seriesId: '77', containerExtension: null, url: null },
     ])
   })
   it('includes category_id param when given; omits otherwise', async () => {

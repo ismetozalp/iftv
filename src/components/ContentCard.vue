@@ -22,8 +22,8 @@ const menuOpen = ref(false)
 const scheduleOpen = ref(false)
 
 const isLive = computed(() => props.item.kind === 'live')
-const nn = computed(() => (isLive.value ? epg.nowNextFor(props.item.name, epg.nowMs) : { now: null, next: null }))
-const hasSchedule = computed(() => isLive.value && epg.hasEpgFor(props.item.name))
+const nn = computed(() => (isLive.value ? epg.nowNextFor(props.item.name, props.item.epgId) : { now: null, next: null }))
+const hasSchedule = computed(() => isLive.value && epg.hasEpgFor(props.item.name, props.item.epgId))
 
 const canWatchLater = computed(
   () => props.item.kind === 'movie' || props.item.kind === 'series' || props.item.kind === 'episode',

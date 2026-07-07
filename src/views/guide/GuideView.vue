@@ -4,7 +4,6 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useLibraryStore } from '@/stores/library'
 import { useEpgStore } from '@/stores/epg'
 import { usePlayerStore } from '@/stores/player'
-import { useSettingsStore } from '@/stores/settings'
 import type { ContentItem } from '@/core/content/types'
 import type { Programme } from '@/core/epg/types'
 import { programmeBlocks, timeTicks, nowMarkerPx, type ProgrammeBlock } from '@/core/epg/layout'
@@ -19,7 +18,6 @@ const ws = useWorkspaceStore()
 const lib = useLibraryStore()
 const epg = useEpgStore()
 const player = usePlayerStore()
-const settings = useSettingsStore()
 
 function floorToHour(ms: number): number {
   return Math.floor(ms / HOUR) * HOUR
@@ -166,9 +164,8 @@ function playFromDetails() {
       <span class="text-muted small">{{ rangeLabel }}</span>
     </div>
 
-    <p v-if="!settings.epgUrl" class="text-muted p-2">Set an EPG URL in Settings.</p>
-    <p v-else-if="loading" class="text-muted p-2">Loading&hellip;</p>
-    <p v-else-if="!rows.length" class="text-muted p-2">No guide data for your channels.</p>
+    <p v-if="loading" class="text-muted p-2">Loading&hellip;</p>
+    <p v-else-if="!rows.length" class="text-muted p-2">No guide data for this account&apos;s channels. Set its EPG URL when adding/editing the account, or a default in Settings.</p>
     <div v-else class="iftv-guide-body flex-fill d-flex">
       <div ref="namesEl" class="iftv-guide-names" @scroll="onNamesScroll">
         <div class="iftv-guide-names-header"></div>

@@ -31,6 +31,7 @@ export async function getSeries(
         kind: 'series' as const,
         name: toStr(r.name),
         logo: toStr(r.cover),
+        epgId: '',
         categoryId: toStr(r.category_id),
         streamId: null,
         seriesId: seriesId || null,

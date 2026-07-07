@@ -30,11 +30,11 @@ describe('getLiveCategories', () => {
 describe('getLiveStreams', () => {
   it('maps stream fields and drops entries without a stream_id', async () => {
     const t = transport([
-      { stream_id: 101, name: 'CNN', stream_icon: 'http://l/cnn.png', category_id: '1' },
+      { stream_id: 101, name: 'CNN', stream_icon: 'http://l/cnn.png', epg_channel_id: 'cnn.tr', category_id: '1' },
       { name: 'No id', category_id: '1' },
     ])
     expect(await getLiveStreams(t, 'http://h', 'u', 'p')).toEqual([
-      { id: 'x:live:101', kind: 'live', name: 'CNN', logo: 'http://l/cnn.png', categoryId: '1', streamId: '101', seriesId: null, containerExtension: null, url: null },
+      { id: 'x:live:101', kind: 'live', name: 'CNN', logo: 'http://l/cnn.png', epgId: 'cnn.tr', categoryId: '1', streamId: '101', seriesId: null, containerExtension: null, url: null },
     ])
   })
   it('includes category_id param when given', async () => {

@@ -92,6 +92,7 @@ function playEpisode(episode: Episode) {
     kind: 'episode',
     name: episode.title,
     logo: '',
+    epgId: '',
     categoryId: '',
     streamId: episode.episodeId,
     seriesId: null,

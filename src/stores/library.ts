@@ -3,6 +3,7 @@ import type { Account } from '@/core/accounts/accounts'
 import type { Category, ContentItem } from '@/core/content/types'
 import { createProvider, type ContentProvider, type Section } from '@/core/content/provider'
 import { useHost } from '@/composables/useHost'
+import { useEpgStore } from '@/stores/epg'
 
 interface LibDeps { makeProvider: (account: Account, section: Section) => ContentProvider }
 
@@ -47,6 +48,12 @@ export const useLibraryStore = defineStore('library', {
       const { makeProvider } = await this._factory()
       this._provider = makeProvider(account, section)
       await this.loadCategories()
+      // Capture the provider's own guide URL (M3U `url-tvg`; '' for Xtream) so the EPG store can
+      // resolve this account's guide from it. Fire-and-forget; never blocks browsing.
+      if (section === 'live' && this._provider) {
+        const provider = this._provider
+        void provider.getTvgUrl().then((tvgUrl) => useEpgStore().noteTvgUrl(account.id, tvgUrl)).catch(() => {})
+      }
     },
     async loadCategories() {
       if (!this._provider) return
