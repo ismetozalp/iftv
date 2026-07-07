@@ -6,6 +6,9 @@ import { usePlayerStore } from '@/stores/player'
 import { useEpgStore } from '@/stores/epg'
 import { resolveCacheRoot } from '@/core/media/session'
 import { cacheSizeBytes, clearCache } from '@/adapters/cockpitCache'
+import { gatherFiles, restoreFiles, downloadTextFile, readUploadedFile } from '@/adapters/cockpitBackup'
+import { buildBundle, parseBundle } from '@/core/backup/bundle'
+import { encryptBackup, decryptBackup } from '@/core/backup/crypto'
 import type { TranscodeMode } from '@/core/media/encoder'
 
 const props = defineProps<{ open: boolean }>()
@@ -105,6 +108,70 @@ async function onSaveEpgUrl() {
 
 async function onRefreshEpgNow() {
   await epg.refresh()
+}
+
+// Backup & restore
+const exportPw = ref('')
+const exportPw2 = ref('')
+const importPw = ref('')
+const importFile = ref<File | null>(null)
+const backupMsg = ref('')
+const backupError = ref('')
+
+function ymd(): string {
+  const d = new Date()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
+async function onExport() {
+  backupError.value = ''
+  backupMsg.value = ''
+  if (!exportPw.value) {
+    backupError.value = 'Enter a password'
+    return
+  }
+  if (exportPw.value !== exportPw2.value) {
+    backupError.value = "Passwords don't match"
+    return
+  }
+  try {
+    const env = await encryptBackup(buildBundle(await gatherFiles(), Date.now()), exportPw.value)
+    downloadTextFile(`inflighttv-backup-${ymd()}.iftv`, env)
+    backupMsg.value = 'Backup downloaded.'
+    exportPw.value = ''
+    exportPw2.value = ''
+  } catch {
+    backupError.value = 'Could not create the backup.'
+  }
+}
+
+function onImportFile(e: Event) {
+  importFile.value = (e.target as HTMLInputElement).files?.[0] ?? null
+}
+
+async function onImport() {
+  backupError.value = ''
+  if (!importFile.value || !importPw.value) return
+  const text = await readUploadedFile(importFile.value)
+  let files: Record<string, unknown>
+  try {
+    const plain = await decryptBackup(text, importPw.value)
+    files = parseBundle(plain).files
+  } catch {
+    backupError.value = "Incorrect password or not a valid In-flight TV backup file."
+    importPw.value = ''
+    return
+  }
+  if (!confirm('This will REPLACE your accounts, settings, library and tabs with the backup. Continue?')) return
+  try {
+    await restoreFiles(files)
+  } catch {
+    backupError.value = 'Restore failed while writing files — nothing may be reloaded.'
+    return
+  }
+  window.location.reload()
 }
 
 function close() {
@@ -218,6 +285,51 @@ function close() {
           </span>
         </div>
         <div class="text-danger small" v-if="epg.error">{{ epg.error }}</div>
+      </div>
+      <div class="mt-3">
+        <h5>Backup & restore</h5>
+        <label for="iftv-export-pw" class="form-label">Export — encryption password</label>
+        <div class="d-flex align-items-center gap-2">
+          <input
+            id="iftv-export-pw"
+            type="password"
+            class="form-control"
+            placeholder="Password"
+            v-model="exportPw"
+          />
+          <input
+            id="iftv-export-pw2"
+            type="password"
+            class="form-control"
+            placeholder="Confirm password"
+            v-model="exportPw2"
+          />
+          <button class="btn btn-sm btn-outline-secondary" @click="onExport">Export backup</button>
+        </div>
+        <small class="text-muted" v-if="backupMsg">{{ backupMsg }}</small>
+        <label for="iftv-import-file" class="form-label mt-3">Import — backup file</label>
+        <div class="d-flex align-items-center gap-2">
+          <input
+            id="iftv-import-file"
+            type="file"
+            class="form-control"
+            accept=".iftv,application/octet-stream"
+            @change="onImportFile"
+          />
+          <input
+            id="iftv-import-pw"
+            type="password"
+            class="form-control"
+            placeholder="Password"
+            v-model="importPw"
+          />
+          <button class="btn btn-sm btn-outline-secondary" @click="onImport">Import backup</button>
+        </div>
+        <div class="text-danger small" v-if="backupError">{{ backupError }}</div>
+        <small class="text-muted d-block mt-2">
+          Keep this file and its password safe — it holds your account credentials (encrypted) and a lost password
+          can't be recovered.
+        </small>
       </div>
     </div>
   </div>
