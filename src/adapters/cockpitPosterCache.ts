@@ -30,6 +30,14 @@ function fileOf(url: string): string | null {
   return dir ? `${dir}/${cyrb53(url)}` : null
 }
 
+// Poster cache filenames are always a bare cyrb53 hex hash. Enforce that before any name reaches
+// cockpit.file — the name in restorePosters() comes from an untrusted backup file, so a crafted key
+// like "../../.config/cockpit/foo" must never escape the .posters/ dir (path-traversal / arbitrary write).
+const SAFE_NAME = /^[0-9a-f]{1,20}$/
+export function isSafePosterName(name: string): boolean {
+  return SAFE_NAME.test(name)
+}
+
 // Fast local read — returns null (miss) if the cache isn't configured, the file is absent, or empty.
 export async function readCachedPoster(url: string): Promise<Uint8Array | null> {
   const path = fileOf(url)
@@ -81,7 +89,7 @@ export async function listCachedPosters(): Promise<string[]> {
 }
 
 export async function readPosterFile(name: string): Promise<Uint8Array | null> {
-  if (!dir) return null
+  if (!dir || !isSafePosterName(name)) return null
   const handle = cockpit.file<Uint8Array>(`${dir}/${name}`, { binary: true } as never)
   try {
     const bytes = await handle.read()
@@ -94,7 +102,7 @@ export async function readPosterFile(name: string): Promise<Uint8Array | null> {
 }
 
 export async function writePosterFile(name: string, bytes: Uint8Array): Promise<void> {
-  if (!dir || !bytes || bytes.length === 0) return
+  if (!dir || !bytes || bytes.length === 0 || !isSafePosterName(name)) return
   try {
     if (ensured) await ensured
     const handle = cockpit.file<Uint8Array>(`${dir}/${name}`, { binary: true } as never)
