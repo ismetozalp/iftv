@@ -12,7 +12,7 @@ const props = withDefaults(defineProps<{ item: ContentItem; context?: 'browse' |
 })
 const emit = defineEmits<{ remove: [] }>()
 
-const { url, failed } = useProxiedImage(() => props.item.logo)
+const { url, failed, loading } = useProxiedImage(() => props.item.logo)
 
 const ws = useWorkspaceStore()
 const collections = useCollectionsStore()
@@ -120,7 +120,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="iftv-card card h-100" :class="`iftv-card-${item.kind}`" :title="item.name">
     <div class="iftv-card-img">
-      <img v-if="url && !failed" :src="url" alt="" loading="lazy" @error="failed = true" />
+      <div v-if="loading" class="iftv-card-skeleton" aria-label="Loading"></div>
+      <img v-else-if="url && !failed" :src="url" alt="" loading="lazy" @error="failed = true" />
       <span v-else class="iftv-card-fallback">{{ item.name.slice(0, 2).toUpperCase() }}</span>
     </div>
     <div class="iftv-card-name text-truncate">{{ item.name }}</div>

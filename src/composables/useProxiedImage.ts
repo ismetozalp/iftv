@@ -22,12 +22,15 @@ const cache = new Map<string, string>()
 export function useProxiedImage(
   src: () => string | null | undefined,
   deps: UseProxiedImageDeps = {},
-): { url: Ref<string>; failed: Ref<boolean> } {
+): { url: Ref<string>; failed: Ref<boolean>; loading: Ref<boolean> } {
   const fetchBytes = deps.fetchBytes ?? fetchImageBytes
   const makeUrl = deps.makeUrl ?? ((bytes: Uint8Array) => URL.createObjectURL(new Blob([bytes as BlobPart])))
 
   const url = ref('')
   const failed = ref(false)
+  // True while a poster is actually being fetched (queued behind the limiter → decoded). Drives the
+  // card's loading shimmer. A cached hit or a missing src is never "loading" (nothing to wait for).
+  const loading = ref(false)
 
   watch(
     src,
@@ -35,13 +38,17 @@ export function useProxiedImage(
       failed.value = false
       if (!value) {
         url.value = ''
+        loading.value = false
         return
       }
       const cached = cache.get(value)
       if (cached) {
         url.value = cached
+        loading.value = false
         return
       }
+      url.value = ''
+      loading.value = true
       try {
         const bytes = await imageLimiter.run(() => fetchBytes(value))
         const blobUrl = makeUrl(bytes)
@@ -50,10 +57,12 @@ export function useProxiedImage(
       } catch {
         failed.value = true
         url.value = ''
+      } finally {
+        loading.value = false
       }
     },
     { immediate: true },
   )
 
-  return { url, failed }
+  return { url, failed, loading }
 }

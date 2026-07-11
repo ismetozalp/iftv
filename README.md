@@ -176,7 +176,9 @@ sudo apt install ffmpeg curl
 sudo pacman -S ffmpeg curl
 ```
 
-**openSUSE** — `ffmpeg` is in Packman:
+**openSUSE (Tumbleweed / Leap)** — the full `ffmpeg` comes from the community **Packman**
+*repository* (a repo — not the Arch `pacman` command). Enable it once if you haven't
+(`YaST → Software Repositories → Add → Community Repositories → Packman`), then:
 ```bash
 sudo zypper install ffmpeg curl
 ```
@@ -215,8 +217,9 @@ InFlight TV can update itself from its GitHub releases.
 
 - The version **badge** in the top-right (e.g. **IF TV v1.0.0**) checks for updates
   when clicked. If a newer release exists it asks to confirm, then downloads it,
-  installs it, and restarts Cockpit. A small dot on the badge means an update was
-  found by the silent check that runs shortly after load.
+  installs it — streaming the progress in a dialog — and restarts Cockpit. A small
+  dot on the badge means an update was found by the silent check that runs shortly
+  after load.
 - **Settings → Plugin update** does the same and lets you set the source repo
   (default **`ismetozalp/iftv`**), see the installed version, and watch the install
   log. **Update & restart Cockpit** applies it.

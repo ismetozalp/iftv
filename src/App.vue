@@ -23,6 +23,7 @@ const player = usePlayerStore()
 const settingsOpen = ref(false)
 const updateConfirm = ref(false) // inline confirm popover under the badge
 const updateJustChecked = ref(false) // show the "up to date" note only right after a manual click
+const updateModalOpen = ref(false) // dedicated install-progress modal (streams the update log)
 
 async function onBadgeClick() {
   updateConfirm.value = false
@@ -33,7 +34,7 @@ async function onBadgeClick() {
 }
 async function confirmUpdate() {
   updateConfirm.value = false
-  settingsOpen.value = true // reveal the streamed install log in Settings
+  updateModalOpen.value = true // stream the install log in its own modal (Cockpit restarts on success)
   await updater.update()
 }
 // The full player overlays below the header so the account tabs stay reachable while playing.
@@ -114,5 +115,22 @@ onBeforeUnmount(() => clearInterval(epgClock))
     <SeriesDetail />
     <PlayerHost />
     <SettingsView :open="settingsOpen" @close="settingsOpen = false" />
+
+    <div v-if="updateModalOpen" class="iftv-detail">
+      <div class="iftv-detail-card" style="max-width: 560px">
+        <h4>Updating IF TV</h4>
+        <p class="small text-muted mb-2">
+          Installing <strong>v{{ updater.latest?.version }}</strong> — Cockpit restarts automatically when it's done.
+        </p>
+        <pre class="iftv-update-log small mb-2">{{ updater.log.join('\n') || 'Starting…' }}</pre>
+        <div v-if="updater.error" class="text-danger small mb-2">{{ updater.error }}</div>
+        <div class="d-flex align-items-center justify-content-end gap-2">
+          <span v-if="updater.installing" class="d-flex align-items-center gap-2 small text-muted me-auto">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Installing…
+          </span>
+          <button v-if="!updater.installing" class="btn btn-sm btn-light" @click="updateModalOpen = false">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
