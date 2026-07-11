@@ -24,3 +24,6 @@ npm-debug.log*
 # Local dev-only mock server (not shipped)
 dev/
 inflighttv-*.zip
+
+# Release notes drafts (except any already committed)
+RELEASE_NOTES_*.md
