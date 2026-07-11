@@ -20,6 +20,10 @@ const epg = useEpgStore()
 
 const menuOpen = ref(false)
 const scheduleOpen = ref(false)
+// The card has overflow:hidden and lives in an overflow:auto virtual grid, so an in-flow dropdown
+// gets clipped (badly for lower rows). Teleport the open menu to <body> and position it as a fixed
+// overlay anchored to the trigger button — escaping both clips. menuStyle is the anchored placement.
+const menuStyle = ref<Record<string, string>>({})
 
 const isLive = computed(() => props.item.kind === 'live')
 const nn = computed(() => (isLive.value ? epg.nowNextFor(props.item.name, props.item.epgId) : { now: null, next: null }))
@@ -42,14 +46,32 @@ function toggleFavorite() {
   if (!account) return
   void collections.toggleFavorite(account, props.item)
 }
-function toggleMenu() {
+// Anchor a fixed overlay to the trigger button: right-align to the button (translateX(-100%)) and
+// flip above it when there isn't room below, so it's never clipped by the viewport bottom either.
+function anchorTo(el: HTMLElement, estHeight: number) {
+  const r = el.getBoundingClientRect()
+  const openUp = window.innerHeight - r.bottom < estHeight && r.top > window.innerHeight - r.bottom
+  menuStyle.value = {
+    position: 'fixed',
+    left: `${r.right}px`,
+    right: 'auto', // override the .iftv-card-menu right:0 — left+right would otherwise stretch it full-width
+    top: openUp ? `${r.top}px` : `${r.bottom}px`,
+    transform: openUp ? 'translate(-100%, -100%)' : 'translateX(-100%)',
+    zIndex: '1080', // teleported to <body>: sit above app chrome (header z-1060, modals z-1070)
+  }
+}
+function toggleMenu(e: MouseEvent) {
+  scheduleOpen.value = false
   menuOpen.value = !menuOpen.value
+  if (menuOpen.value) anchorTo(e.currentTarget as HTMLElement, 240)
 }
 function closeMenu() {
   menuOpen.value = false
 }
-function toggleSchedule() {
+function toggleSchedule(e: MouseEvent) {
+  menuOpen.value = false
   scheduleOpen.value = !scheduleOpen.value
+  if (scheduleOpen.value) anchorTo(e.currentTarget as HTMLElement, 272)
 }
 function addToWatchLater() {
   const account = ws.activeAccount
@@ -77,12 +99,22 @@ function remove() {
   emit('remove')
 }
 
-function onDocClick() {
+function closeAll() {
   menuOpen.value = false
   scheduleOpen.value = false
 }
-onMounted(() => document.addEventListener('click', onDocClick))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+// A fixed overlay doesn't follow its anchor when the grid scrolls, so dismiss on any scroll/resize
+// (capture:true catches the inner virtual-grid's scroll, which doesn't bubble to window).
+onMounted(() => {
+  document.addEventListener('click', closeAll)
+  window.addEventListener('scroll', closeAll, true)
+  window.addEventListener('resize', closeAll)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeAll)
+  window.removeEventListener('scroll', closeAll, true)
+  window.removeEventListener('resize', closeAll)
+})
 </script>
 
 <template>
@@ -99,9 +131,11 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     <div v-if="ws.activeAccount || hasSchedule" class="iftv-card-actions" @click.stop>
       <div v-if="hasSchedule" class="iftv-card-schedule">
         <button type="button" class="btn btn-sm iftv-card-info-btn" title="Schedule" @click.stop="toggleSchedule">🕐</button>
-        <div v-if="scheduleOpen" class="iftv-card-menu iftv-card-schedule-panel dropdown-menu show" @click.stop>
-          <EpgSchedule :channel-name="item.name" />
-        </div>
+        <Teleport to="body">
+          <div v-if="scheduleOpen" class="iftv-card-menu iftv-card-schedule-panel dropdown-menu show" :style="menuStyle" @click.stop>
+            <EpgSchedule :channel-name="item.name" />
+          </div>
+        </Teleport>
       </div>
       <button
         v-if="ws.activeAccount"
@@ -117,16 +151,18 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
       <div v-if="ws.activeAccount && context === 'browse'" class="iftv-card-add">
         <button type="button" class="btn btn-sm iftv-card-add-btn" title="Add to…" @click.stop="toggleMenu">＋</button>
-        <div v-if="menuOpen" class="iftv-card-menu dropdown-menu show" @click.stop>
-          <button v-if="canWatchLater" type="button" class="dropdown-item" @click="addToWatchLater">
-            Add to Watch Later
-          </button>
-          <h6 class="dropdown-header">Add to list ▸</h6>
-          <button v-for="l in lists" :key="l.id" type="button" class="dropdown-item" @click="addToExistingList(l.id)">
-            {{ l.name }}
-          </button>
-          <button type="button" class="dropdown-item" @click="addToNewList">New list…</button>
-        </div>
+        <Teleport to="body">
+          <div v-if="menuOpen" class="iftv-card-menu dropdown-menu show" :style="menuStyle" @click.stop>
+            <button v-if="canWatchLater" type="button" class="dropdown-item" @click="addToWatchLater">
+              Add to Watch Later
+            </button>
+            <h6 class="dropdown-header">Add to list ▸</h6>
+            <button v-for="l in lists" :key="l.id" type="button" class="dropdown-item" @click="addToExistingList(l.id)">
+              {{ l.name }}
+            </button>
+            <button type="button" class="dropdown-item" @click="addToNewList">New list…</button>
+          </div>
+        </Teleport>
       </div>
       <button v-else-if="ws.activeAccount" type="button" class="btn btn-sm iftv-card-remove" title="Remove" @click.stop="remove">✕</button>
     </div>
