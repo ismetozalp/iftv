@@ -22,4 +22,16 @@ describe('bundle', () => {
   it('BACKUP_FILES is the 4 config files (no epg cache)', () => {
     expect(BACKUP_FILES).toEqual(['accounts.json', 'settings.json', 'library.json', 'tabs.json'])
   })
+
+  it('omits posters when none given (backward-compatible bundle)', () => {
+    const json = buildBundle({ 'settings.json': {} }, 1)
+    expect(JSON.parse(json).posters).toBeUndefined()
+    expect(parseBundle(json).posters).toBeUndefined()
+  })
+
+  it('round-trips an optional posters map', () => {
+    const posters = { deadbeef: 'AAEC', cafef00d: 'Zm9v' }
+    const json = buildBundle({ 'settings.json': {} }, 1, posters)
+    expect(parseBundle(json).posters).toEqual(posters)
+  })
 })

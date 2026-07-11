@@ -25,7 +25,9 @@ export async function fetchImageBytes(url: string): Promise<Uint8Array> {
     [
       'curl', '-sL',
       '--proto', '=http,https', '--proto-redir', '=http,https', '--max-redirs', '5',
-      '--max-time', '15', '--user-agent', 'VLC/3.0.20 LibVLC/3.0.20',
+      // 6s cap: IPTV playlists are full of dead logo URLs — a long timeout lets a handful of them hog
+      // the concurrency limiter's lanes and stall the whole grid. Fail fast, fall back to initials.
+      '--max-time', '6', '--connect-timeout', '4', '--user-agent', 'VLC/3.0.20 LibVLC/3.0.20',
       '--', parsed.toString(),
     ],
     { binary: true, err: 'message' },

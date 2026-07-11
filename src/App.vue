@@ -13,6 +13,9 @@ import { useEpgStore } from '@/stores/epg'
 import { useUpdaterStore } from '@/stores/updater'
 import { usePlayerStore } from '@/stores/player'
 import { initTheme, reapplyTheme } from '@/composables/useTheme'
+import cockpit from 'cockpit'
+import { resolveCacheRoot } from '@/core/media/session'
+import { configurePosterCache } from '@/adapters/cockpitPosterCache'
 
 const ws = useWorkspaceStore()
 const settings = useSettingsStore()
@@ -50,6 +53,12 @@ onMounted(() => {
     .then(() => {
       for (const acc of ws.openTabs) void epg.ensureFresh(acc)
     })
+  // Point the persistent poster cache at the (settings-resolved) media cache root; keep it in sync if
+  // the user changes the cache directory later.
+  void cockpit.user().then((u) => {
+    configurePosterCache(resolveCacheRoot(u.home, settings.cacheDir))
+    watch(() => settings.cacheDir, (d) => configurePosterCache(resolveCacheRoot(u.home, d)))
+  })
   const stopTheme = initTheme(() => settings.themeMode)
   onBeforeUnmount(stopTheme)
   if (headerEl.value) {

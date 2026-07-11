@@ -6,7 +6,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useUpdaterStore } from '@/stores/updater'
 import { resolveCacheRoot } from '@/core/media/session'
 import { cacheSizeBytes, clearCache } from '@/adapters/cockpitCache'
-import { gatherFiles, restoreFiles, downloadTextFile, readUploadedFile } from '@/adapters/cockpitBackup'
+import { gatherFiles, restoreFiles, gatherPosters, restorePosters, downloadTextFile, readUploadedFile } from '@/adapters/cockpitBackup'
 import { buildBundle, parseBundle } from '@/core/backup/bundle'
 import { encryptBackup, decryptBackup } from '@/core/backup/crypto'
 import type { TranscodeMode } from '@/core/media/encoder'
@@ -93,6 +93,7 @@ const importPw = ref('')
 const importFile = ref<File | null>(null)
 const backupMsg = ref('')
 const backupError = ref('')
+const includePosters = ref(false) // opt-in: bundle the cached posters/logos into the backup
 
 function ymd(): string {
   const d = new Date()
@@ -113,9 +114,11 @@ async function onExport() {
     return
   }
   try {
-    const env = await encryptBackup(buildBundle(await gatherFiles(), Date.now()), exportPw.value)
+    const posters = includePosters.value ? await gatherPosters() : undefined
+    const env = await encryptBackup(buildBundle(await gatherFiles(), Date.now(), posters), exportPw.value)
     downloadTextFile(`inflighttv-backup-${ymd()}.iftv`, env)
-    backupMsg.value = 'Backup downloaded.'
+    const n = posters ? Object.keys(posters).length : 0
+    backupMsg.value = n > 0 ? `Backup downloaded (with ${n} cached posters).` : 'Backup downloaded.'
     exportPw.value = ''
     exportPw2.value = ''
   } catch {
@@ -131,10 +134,10 @@ async function onImport() {
   backupError.value = ''
   if (!importFile.value || !importPw.value) return
   const text = await readUploadedFile(importFile.value)
-  let files: Record<string, unknown>
+  let bundle: ReturnType<typeof parseBundle>
   try {
     const plain = await decryptBackup(text, importPw.value)
-    files = parseBundle(plain).files
+    bundle = parseBundle(plain)
   } catch {
     backupError.value = "Incorrect password or not a valid In-flight TV backup file."
     importPw.value = ''
@@ -142,7 +145,9 @@ async function onImport() {
   }
   if (!confirm('This will REPLACE your accounts, settings, library and tabs with the backup. Continue?')) return
   try {
-    await restoreFiles(files)
+    await restoreFiles(bundle.files)
+    // If the backup carried cached posters, restore them too so the grid is fast immediately.
+    if (bundle.posters) await restorePosters(bundle.posters)
   } catch {
     backupError.value = 'Restore failed while writing files — nothing may be reloaded.'
     return
@@ -157,7 +162,7 @@ function close() {
 
 <template>
   <div v-if="open" class="iftv-detail">
-    <div class="iftv-detail-card" style="max-width: 420px">
+    <div class="iftv-detail-card" style="max-width: 640px">
       <button class="btn btn-sm btn-light iftv-detail-close" @click="close">✕ Close</button>
       <h4>Settings</h4>
       <div class="mt-3">
@@ -272,7 +277,13 @@ function close() {
           />
           <button class="btn btn-sm btn-outline-secondary" @click="onExport">Export backup</button>
         </div>
-        <small class="text-muted" v-if="backupMsg">{{ backupMsg }}</small>
+        <div class="form-check mt-2">
+          <input id="iftv-export-posters" class="form-check-input" type="checkbox" v-model="includePosters" />
+          <label for="iftv-export-posters" class="form-check-label small text-muted">
+            Include cached posters / logos (larger file, but the grid loads instantly after a restore)
+          </label>
+        </div>
+        <small class="text-muted d-block" v-if="backupMsg">{{ backupMsg }}</small>
         <label for="iftv-import-file" class="form-label mt-3">Import — backup file</label>
         <div class="d-flex align-items-center gap-2">
           <input

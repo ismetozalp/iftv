@@ -30,8 +30,10 @@ browser can't decode on its own.
 - 🔊 **Audio & subtitle tracks** — pick the language / subtitle stream per title.
 - ⭐ **Personal library** — favorites, custom lists, watch-later, **continue
   watching** (resume where you left off), and history.
-- 💾 **Cache & backup** — a relocatable, size-capped segment cache, and an
-  **encrypted backup** you can export/import (accounts + settings + library).
+- 💾 **Cache & backup** — a relocatable, size-capped segment cache, a persistent
+  **poster/logo cache** (the grid loads instantly on later visits), and an
+  **encrypted backup** you can export/import (accounts + settings + library, and
+  optionally the cached posters so a restored install is fast right away).
 - 🎨 **Light / Dark / System theme**, following your Cockpit / OS theme.
 
 Everything runs through Cockpit's own bridge (`cockpit.spawn`/`cockpit.file`);
