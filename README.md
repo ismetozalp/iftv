@@ -19,8 +19,8 @@ browser can't decode on its own.
 - 📺 **Live TV, Movies & Series** from Xtream Codes panels or M3U playlists —
   categories, search, channel logos, and instant playback.
 - 🗓️ **EPG / TV guide** — now/next on live channels plus a full **channel × time
-  guide grid**, from a configurable external XMLTV source (name-matched to your
-  channels).
+  guide grid**, from a per-account XMLTV source (auto-detected from the Xtream panel
+  or playlist, or set manually per account; name-matched to your channels).
 - 👥 **Multiple accounts in tabs** — open several providers at once. Each account
   keeps its **own single connection**; play on one while another keeps running.
 - 🔽 **Minimizable player** — dock playback to a bottom bar and keep browsing
@@ -97,12 +97,13 @@ close — while the rest of the app stays fully interactive.
 
 ![Library](screenshots/library.png)
 
-**Settings — theme, buffer, transcoding, cache, EPG, backup**
+**Settings — theme, buffer, transcoding, cache, backup**
 
 ![Settings](screenshots/settings.png)
 
 Pick the theme, buffer size, transcoding mode (with an encoder self-test), the
-cache directory + size cap, the EPG URL, and export/import an encrypted backup.
+cache directory + size cap, and export/import an encrypted backup (optionally
+including the cached posters). The TV guide URL is set per account, not here.
 
 ---
 
