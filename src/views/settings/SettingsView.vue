@@ -41,6 +41,7 @@ function onTestEncoders() {
 const cacheDirInput = ref(settings.cacheDir)
 const cacheError = ref('')
 const cacheSizeLabel = ref('')
+const cacheSizeLoading = ref(false) // `du -sb` on a big cache is slow — show a spinner while it runs
 const defaultRoot = ref('')
 const resolvedRoot = ref('')
 
@@ -58,8 +59,14 @@ async function refreshCache() {
   const home = (await cockpit.user()).home
   defaultRoot.value = `${home}/.cache/inflighttv`
   resolvedRoot.value = resolveCacheRoot(home, settings.cacheDir)
-  const b = await cacheSizeBytes(resolvedRoot.value)
-  cacheSizeLabel.value = formatBytes(b)
+  // Recompute the on-disk size every time (it changes as you play / clear) — async with a spinner so
+  // a slow `du` on a large cache never blocks the panel or shows a stale number.
+  cacheSizeLoading.value = true
+  try {
+    cacheSizeLabel.value = formatBytes(await cacheSizeBytes(resolvedRoot.value))
+  } finally {
+    cacheSizeLoading.value = false
+  }
 }
 
 watch(
@@ -247,7 +254,11 @@ function close() {
           @change="onCacheLimit"
         />
         <div class="d-flex align-items-center gap-2 mt-2">
-          <span class="text-muted small">Current cache: {{ cacheSizeLabel }}</span>
+          <span class="text-muted small d-inline-flex align-items-center gap-1">
+            Current cache:
+            <span v-if="cacheSizeLoading" class="spinner-border spinner-border-sm" style="width: 0.8rem; height: 0.8rem" role="status" aria-label="Calculating cache size"></span>
+            <template v-else>{{ cacheSizeLabel || '—' }}</template>
+          </span>
           <button
             class="btn btn-sm btn-outline-secondary"
             :disabled="player.anyPlaying"
