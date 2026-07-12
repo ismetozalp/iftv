@@ -18,7 +18,15 @@ export async function probeWritable(dir: string): Promise<boolean> {
 // Size of the resolved cache root (already includes the /inflighttv subdir — see resolveCacheRoot).
 export async function cacheSizeBytes(root: string): Promise<number> {
   try {
-    const o = (await cockpit.spawn(['du', '-sb', root], { err: 'message' })) as unknown as string
+    // `du` exits non-zero whenever a file vanishes mid-scan — routine during playback (ffmpeg rotates
+    // and deletes HLS segments) and on session teardown. cockpit.spawn would then REJECT and we'd
+    // report 0 even though du already printed the running total. Suppress those errors and force exit 0
+    // (via `sh -c … || true`, root as $0 → no injection) so we keep the total; an approximate size
+    // during active writes is fine. A genuinely missing root → empty stdout → 0.
+    const o = (await cockpit.spawn(
+      ['sh', '-c', 'du -sb "$0" 2>/dev/null || true', root],
+      { err: 'message' },
+    )) as unknown as string
     return parseInt(String(o).split(/\s+/)[0], 10) || 0
   } catch {
     return 0
