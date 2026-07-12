@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useDetailStore } from '@/stores/detail'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { usePlayerStore } from '@/stores/player'
@@ -7,6 +7,7 @@ import { useCollectionsStore } from '@/stores/collections'
 import type { ContentItem } from '@/core/content/types'
 import type { Episode } from '@/core/xtream/seriesInfo'
 import { useProxiedImage } from '@/composables/useProxiedImage'
+import AnchoredMenu from '@/components/AnchoredMenu.vue'
 
 const detail = useDetailStore()
 const ws = useWorkspaceStore()
@@ -41,7 +42,6 @@ function addToExistingList(listId: string) {
   const item = detail.item
   if (!account || !item) return
   void collections.addToList(listId, account, item)
-  listMenuOpen.value = false
 }
 async function addToNewList() {
   const account = ws.activeAccount
@@ -52,18 +52,7 @@ async function addToNewList() {
   await collections.createList(name.trim())
   const created = collections.listsOf(account.id)[0]
   if (created) await collections.addToList(created.id, account, item)
-  listMenuOpen.value = false
 }
-
-const listMenuOpen = ref(false)
-function toggleListMenu() {
-  listMenuOpen.value = !listMenuOpen.value
-}
-function onDocClick() {
-  listMenuOpen.value = false
-}
-onMounted(() => document.addEventListener('click', onDocClick))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 
 const selectedSeason = ref<number | null>(null)
 watch(
@@ -137,22 +126,25 @@ function close() {
             <button v-if="ws.activeAccount" type="button" class="btn btn-sm btn-outline-secondary" @click="addToWatchLater">
               ＋ Watch Later
             </button>
-            <div v-if="ws.activeAccount" class="dropdown" @click.stop>
-              <button
-                type="button"
-                class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                aria-expanded="false"
-                @click.stop="toggleListMenu"
-              >
-                ＋ Add to list
-              </button>
-              <ul v-if="listMenuOpen" class="dropdown-menu show">
-                <li v-for="l in lists" :key="l.id">
-                  <button type="button" class="dropdown-item" @click="addToExistingList(l.id)">{{ l.name }}</button>
-                </li>
-                <li><button type="button" class="dropdown-item" @click="addToNewList">New list…</button></li>
-              </ul>
-            </div>
+            <AnchoredMenu v-if="ws.activeAccount" align="start">
+              <template #trigger="{ toggle }">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" @click="toggle">
+                  ＋ Add to list
+                </button>
+              </template>
+              <template #default="{ close: closeMenu }">
+                <button
+                  v-for="l in lists"
+                  :key="l.id"
+                  type="button"
+                  class="dropdown-item"
+                  @click="addToExistingList(l.id); closeMenu()"
+                >
+                  {{ l.name }}
+                </button>
+                <button type="button" class="dropdown-item" @click="addToNewList(); closeMenu()">New list…</button>
+              </template>
+            </AnchoredMenu>
           </div>
 
           <div v-if="detail.series.seasons.length" class="btn-group btn-group-sm mb-2" role="group">
