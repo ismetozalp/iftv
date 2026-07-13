@@ -372,7 +372,7 @@ function onScrub(e: MouseEvent) {
       <video
         ref="video"
         class="iftv-player-video"
-        :controls="slot.duration == null"
+        :controls="full && slot.duration == null"
         :muted="!isActive"
         autoplay
         playsinline
