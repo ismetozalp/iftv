@@ -27,3 +27,6 @@ inflighttv-*.zip
 
 # Release notes drafts (except any already committed)
 RELEASE_NOTES_*.md
+
+# Local planning/design docs — kept out of the published repo
+docs/
