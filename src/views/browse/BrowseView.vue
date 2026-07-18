@@ -16,7 +16,8 @@ const player = usePlayerStore()
 const detail = useDetailStore()
 function onPlay(item: ContentItem) {
   if (!ws.activeAccount) return
-  if (item.kind === 'live') player.play(ws.activeAccount, item)
+  // Pass the currently-shown live list so the player's prev/next channel buttons walk this list.
+  if (item.kind === 'live') player.play(ws.activeAccount, item, { playlist: shown.value })
   else if (item.kind === 'movie') detail.openMovie(ws.activeAccount, item)
   else if (item.kind === 'series') detail.openSeries(ws.activeAccount, item)
 }

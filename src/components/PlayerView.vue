@@ -65,6 +65,24 @@ const isActive = computed(() => props.accountId === ws.activeAccount?.id)
 const full = computed(() => isActive.value && !!slot.value && !slot.value.minimized && slot.value.status !== 'idle')
 const minimizedActive = computed(() => isActive.value && !!slot.value && slot.value.minimized)
 
+// Prev/next channel nav: only for LIVE (duration == null) played from a list of 2+ channels.
+// Disabled at the list boundaries (no wrap).
+const channelIndex = computed(() => {
+  const s = slot.value
+  return s?.item ? s.playlist.findIndex((c) => c.id === s.item!.id) : -1
+})
+const showChannelNav = computed(
+  () => !!slot.value && slot.value.duration == null && (slot.value.playlist?.length ?? 0) > 1 && channelIndex.value >= 0,
+)
+const hasPrev = computed(() => channelIndex.value > 0)
+const hasNext = computed(() => channelIndex.value >= 0 && channelIndex.value < (slot.value?.playlist.length ?? 0) - 1)
+function prevChannel() {
+  if (slot.value) player.prevChannel(slot.value.account)
+}
+function nextChannel() {
+  if (slot.value) player.nextChannel(slot.value.account)
+}
+
 function clearWatchdog() {
   // Does NOT clear the stall watch: `loadeddata`→onLoadedData calls this to retire the one-shot
   // undecodable-video watchdog, but the live-stall watch must keep running for the whole session.
@@ -355,6 +373,10 @@ function onScrub(e: MouseEvent) {
           {{ (t.language || ('Sub ' + t.index)) + (t.text ? '' : ' (bitmap)') }}
         </option>
       </select>
+      <template v-if="showChannelNav">
+        <button class="btn btn-sm btn-light" title="Previous channel" :disabled="!hasPrev" @click="prevChannel">⏮</button>
+        <button class="btn btn-sm btn-light" title="Next channel" :disabled="!hasNext" @click="nextChannel">⏭</button>
+      </template>
       <button class="btn btn-sm btn-light" title="Minimize" @click="player.minimize(slot.account)">—</button>
       <button class="btn btn-sm btn-light" @click="close">✕ Close</button>
     </div>
@@ -398,7 +420,9 @@ function onScrub(e: MouseEvent) {
       <span class="iftv-bar-title text-truncate">
         {{ slot.item?.name }}<template v-if="liveNowNext?.now"> · {{ liveNowNext.now.title }}</template>
       </span>
+      <button v-if="showChannelNav" class="btn btn-sm btn-light" title="Previous channel" :disabled="!hasPrev" @click="prevChannel">⏮</button>
       <button class="btn btn-sm btn-light" :title="paused ? 'Play' : 'Pause'" @click="togglePlay">{{ paused ? '▶' : '⏸' }}</button>
+      <button v-if="showChannelNav" class="btn btn-sm btn-light" title="Next channel" :disabled="!hasNext" @click="nextChannel">⏭</button>
       <button class="btn btn-sm btn-light" title="Restore" @click="player.restore(slot.account)">⤢</button>
       <button class="btn btn-sm btn-light" title="Close" @click="close">✕</button>
     </div>

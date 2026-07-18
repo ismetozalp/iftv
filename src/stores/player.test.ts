@@ -66,6 +66,45 @@ describe('usePlayerStore', () => {
     expect(p.session?.sourceUrl).toBe('iftv://s/index.m3u8')
   })
 
+  it('prev/next channel walk the playlist and clamp (disable) at the boundaries', async () => {
+    const { engine } = engineWith()
+    const p = usePlayerStore()
+    p.$configure({ engine })
+    const c0 = { ...item, id: 'x:live:1', streamId: '1', name: 'C0' }
+    const c1 = { ...item, id: 'x:live:2', streamId: '2', name: 'C1' }
+    const c2 = { ...item, id: 'x:live:3', streamId: '3', name: 'C2' }
+    const list = [c0, c1, c2]
+    await p.play(ACCT, c1, { playlist: list })
+    const slot = p.slots[ACCT.id]
+    expect(p.channelIndex(slot)).toBe(1)
+
+    await p.nextChannel(ACCT)
+    expect(slot.item?.id).toBe('x:live:3')
+    expect(p.channelIndex(slot)).toBe(2)
+
+    await p.nextChannel(ACCT) // at the last channel → no-op (button would be disabled)
+    expect(slot.item?.id).toBe('x:live:3')
+
+    await p.prevChannel(ACCT)
+    await p.prevChannel(ACCT)
+    expect(slot.item?.id).toBe('x:live:1')
+    expect(p.channelIndex(slot)).toBe(0)
+
+    await p.prevChannel(ACCT) // at the first channel → no-op
+    expect(slot.item?.id).toBe('x:live:1')
+  })
+
+  it('a listless play (no playlist) clears the channel nav', async () => {
+    const { engine } = engineWith()
+    const p = usePlayerStore()
+    p.$configure({ engine })
+    await p.play(ACCT, item, { playlist: [item, { ...item, id: 'x:live:2' }] })
+    expect(p.slots[ACCT.id].playlist.length).toBe(2)
+    await p.play(ACCT, MOVIE) // e.g. resume from Library — no list
+    expect(p.slots[ACCT.id].playlist).toEqual([])
+    expect(p.channelIndex(p.slots[ACCT.id])).toBe(-1)
+  })
+
   it('play() while already playing stops the previous session first', async () => {
     const { engine, stop } = engineWith()
     const p = usePlayerStore()

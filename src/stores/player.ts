@@ -29,6 +29,10 @@ export interface Slot {
   status: 'idle' | 'starting' | 'playing' | 'error'
   error: string
   item: ContentItem | null
+  // Snapshot of the live-channel list `item` was played from (for prev/next channel nav). Stored raw
+  // (markRaw) — it can be thousands of channels and never needs deep reactivity; the reactive `item`
+  // change is what re-derives the current index. Empty when played from a context without a list.
+  playlist: ContentItem[]
   session: PlaybackSession | null
   duration: number | null
   startOffset: number
@@ -53,6 +57,7 @@ function emptySlot(account: Account): Slot {
     status: 'idle',
     error: '',
     item: null,
+    playlist: [],
     session: null,
     duration: null,
     startOffset: 0,
@@ -162,7 +167,7 @@ export const usePlayerStore = defineStore('player', {
         throw e
       }
     },
-    async play(account: Account, item: ContentItem, opts?: { durationSeconds?: number | null; startOffsetSeconds?: number }) {
+    async play(account: Account, item: ContentItem, opts?: { durationSeconds?: number | null; startOffsetSeconds?: number; playlist?: ContentItem[] }) {
       const slot = this._slot(account)
       const gen = ++slot._mx.gen
       await this._exclusive(slot, async () => {
@@ -172,6 +177,9 @@ export const usePlayerStore = defineStore('player', {
         slot.status = 'starting'
         slot.error = ''
         slot.item = item
+        // The channel list `item` came from — set from the browse grid (and carried through prev/next).
+        // A listless play (library resume, detail) clears it, so prev/next is disabled there.
+        slot.playlist = opts?.playlist ? markRaw(opts.playlist.slice()) : []
         slot.duration = opts?.durationSeconds ?? null
         slot.startOffset = opts?.startOffsetSeconds ?? 0
         slot.transcode = false
@@ -281,6 +289,21 @@ export const usePlayerStore = defineStore('player', {
       const slot = this._slot(account)
       if (slot.status !== 'playing' || !slot.item || slot.duration != null) return
       await this._restart(slot, { offsetSeconds: slot.startOffset })
+    },
+    // Index of the currently-playing item within its channel-list snapshot (-1 if listless / not found).
+    channelIndex(slot: Slot): number {
+      return slot.item ? slot.playlist.findIndex((c) => c.id === slot.item!.id) : -1
+    },
+    // Play the previous / next channel in the snapshot list. No wrap — callers disable at the ends.
+    async prevChannel(account: Account) {
+      const slot = this._slot(account)
+      const i = this.channelIndex(slot)
+      if (i > 0) await this.play(account, slot.playlist[i - 1], { playlist: slot.playlist })
+    },
+    async nextChannel(account: Account) {
+      const slot = this._slot(account)
+      const i = this.channelIndex(slot)
+      if (i >= 0 && i < slot.playlist.length - 1) await this.play(account, slot.playlist[i + 1], { playlist: slot.playlist })
     },
     // Mid-stream / runtime GPU failure recovery: if the active session is transcoding on nvenc and
     // it fails after start, restart on software (x264). Sticky (_forceSoftware) so seeks stay on
