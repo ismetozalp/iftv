@@ -25,10 +25,12 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'history', label: 'History' },
 ]
 
-function onPlay(item: ContentItem, durationSeconds: number | null = null) {
+function onPlay(item: ContentItem, list?: ContentItem[], durationSeconds: number | null = null) {
   const account = ws.activeAccount
   if (!account) return
-  if (item.kind === 'live') player.play(account, item)
+  // Playing a live channel from a collection (favorites, a custom list, history): pass that
+  // collection's LIVE channels as the player's prev/next list so the buttons walk this collection.
+  if (item.kind === 'live') player.play(account, item, { playlist: list?.filter((i) => i.kind === 'live') })
   else if (item.kind === 'movie') detail.openMovie(account, item)
   else if (item.kind === 'series') detail.openSeries(account, item)
   // Episodes have no detail route to re-fetch duration; pass the runtime captured at play time
@@ -171,7 +173,7 @@ async function onClearHistory() {
           <ContentCard
             :item="(item as ContentItem)"
             context="library"
-            @click="onPlay(item as ContentItem)"
+            @click="onPlay(item as ContentItem, favoriteItems)"
             @remove="removeFavorite(item as ContentItem)"
           />
         </template>
@@ -197,7 +199,7 @@ async function onClearHistory() {
           <ContentCard
             :item="(item as ContentItem)"
             context="library"
-            @click="onPlay(item as ContentItem)"
+            @click="onPlay(item as ContentItem, watchLaterItems)"
             @remove="removeWatchLater(item as ContentItem)"
           />
         </template>
@@ -237,7 +239,7 @@ async function onClearHistory() {
             <ContentCard
               :item="(item as ContentItem)"
               context="library"
-              @click="onPlay(item as ContentItem)"
+              @click="onPlay(item as ContentItem, selectedListItems)"
               @remove="removeFromSelectedList(item as ContentItem)"
             />
           </template>
@@ -283,7 +285,7 @@ async function onClearHistory() {
           :key="h.accountId + ':' + h.item.id + ':' + i"
           class="list-group-item d-flex justify-content-between align-items-center"
           role="button"
-          @click="onPlay(h.item, h.durationSeconds)"
+          @click="onPlay(h.item, historyEntries.map((e) => e.item), h.durationSeconds)"
         >
           <span class="text-truncate">{{ h.item.name }}</span>
           <span class="text-muted small ms-2 flex-shrink-0">{{ relativeTime(h.watchedAt) }}</span>
