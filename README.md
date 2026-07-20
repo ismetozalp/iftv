@@ -10,9 +10,12 @@ browser can't decode on its own.
 
 > Named for Cockpit ("in-flight"). It is **not** for aircraft use.
 
-> 👉 **Check out my other plugin — [Explorer](https://github.com/ismetozalp/explorer)**,
-> a Cockpit plugin that turns the web console into a full file manager: browse, edit,
-> preview, search, terminals, and Git, plus fstab/mounts, SMB & NFS shares, and a GRUB editor.
+> 👉 **Check out my other plugins:**
+> - **[Explorer](https://github.com/ismetozalp/explorer)** — a Cockpit plugin that turns the
+>   web console into a full file manager: browse, edit, preview, search, terminals, and Git,
+>   plus fstab/mounts, SMB & NFS shares, and a GRUB editor.
+> - **[ctop](https://github.com/ismetozalp/ctop)** — a Cockpit plugin for real-time system
+>   and process monitoring, right from the web console.
 
 **Highlights**
 
