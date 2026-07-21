@@ -23,7 +23,7 @@ help:
 	@echo "Targets:"
 	@echo "  make build      Build dist/ with Vite (npm ci && npm run build)"
 	@echo "  make dev-link   Symlink dist/ into ~/.local/share/cockpit (no root)"
-	@echo "  make install    Build + copy dist/ to $(INSTALL_DIR) (use sudo)"
+	@echo "  make install    Copy dist/ to $(INSTALL_DIR) (use sudo; builds as the sudo user)"
 	@echo "  make uninstall  Remove $(INSTALL_DIR) (use sudo)"
 	@echo "  make test       Run unit tests + typecheck"
 	@echo "  make zip        Produce $(ZIP) (the built, installable plugin)"
@@ -48,8 +48,17 @@ test:
 	npm run test
 	npm run typecheck
 
-install: build
+# Root must never run npm (sudo strips the user's PATH, where nvm-installed npm
+# lives). Build as the invoking user via SUDO_USER instead; without sudo context,
+# fall back to a pre-built dist/.
+install:
 	@if [ "$$(id -u)" != "0" ]; then echo "install requires root (use sudo)"; exit 1; fi
+	@if [ -n "$$SUDO_USER" ]; then \
+	  echo "Building as $$SUDO_USER"; \
+	  sudo -u "$$SUDO_USER" -i -- $(MAKE) -C "$(CURDIR)" build || exit 1; \
+	elif [ ! -d dist ]; then \
+	  echo "dist/ not found — run 'make build' first, then 'sudo make install'"; exit 1; \
+	fi
 	@if [ -d $(INSTALL_DIR) ]; then echo "Removing previous install at $(INSTALL_DIR)"; rm -rf $(INSTALL_DIR); fi
 	install -d $(INSTALL_DIR)
 	cp -r dist/. $(INSTALL_DIR)/
