@@ -16,6 +16,9 @@ browser can't decode on its own.
 >   plus fstab/mounts, SMB & NFS shares, and a GRUB editor.
 > - **[ctop](https://github.com/ismetozalp/ctop)** — a Cockpit plugin for real-time system
 >   and process monitoring, right from the web console.
+> - **[Manifest](https://github.com/ismetozalp/manifest)** — a Cockpit plugin that drives a
+>   per-user `aria2c` daemon as one unified download manager for torrents, magnets, and
+>   HTTP/FTP/Metalink files.
 
 **Highlights**
 
